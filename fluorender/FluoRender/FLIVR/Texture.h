@@ -30,6 +30,7 @@
 #define SLIVR_Texture_h
 
 #include <vector>
+#include <fstream>
 #include "Transform.h"
 #include "TextureBrick.h"
 #include "Utils.h"
@@ -46,9 +47,10 @@ namespace FLIVR
 		Texture();
 		virtual ~Texture();
 
-		void build(Nrrd* val, Nrrd* grad,
-			double vmn, double vmx,
-			double gmn, double gmx);
+		bool build(Nrrd* val, Nrrd* grad,
+			 double vmn, double vmx,
+			 double gmn, double gmx,
+			 vector<FLIVR::TextureBrick*>* brks = NULL);
 
 		inline Vector res() { return Vector(nx_, ny_, nz_); }
 		inline int nx() { return nx_; }
@@ -124,11 +126,11 @@ namespace FLIVR
 		bool get_sort_bricks() {return sort_bricks_;}
 		// load the bricks independent of the view
 		vector<TextureBrick*>* get_bricks();
-		int get_brick_num() {return int(bricks_.size());}
+		int get_brick_num() {return int((*bricks_).size());}
 		//quota bricks
 		vector<TextureBrick*>* get_quota_bricks();
 
-		inline int nlevels(){ return int(bricks_.size()); }
+		inline int nlevels(){ return int((*bricks_).size()); }
 
 		inline double vmin() const { return vmin_; }
 		inline double vmax() const { return vmax_; }
@@ -138,10 +140,9 @@ namespace FLIVR
 		{vmin_ = vmin; vmax_ = vmax; gmin_ = gmin; gmax_ = gmax;}
 
 		void set_spacings(double x, double y, double z);
-		void get_spacings(double &x, double &y, double &z)
-		{x = spcx_; y = spcy_; z = spcz_;}
-
-		// Creator of the brick owns the nrrd memory.
+		void get_spacings(double &x, double &y, double &z, int lv = -1);
+		
+			// Creator of the brick owns the nrrd memory.
 		void set_nrrd(Nrrd* data, int index);
 		Nrrd* get_nrrd(int index)
 		{if (index>=0&&index<TEXTURE_MAX_COMPONENTS) return data_[index]; else return 0;}
@@ -157,7 +158,18 @@ namespace FLIVR
 		inline void set_use_priority(bool value) {use_priority_ = value;}
 		inline bool get_use_priority() {return use_priority_;}
 		inline int get_n_p0()
-		{if (use_priority_) return n_p0_; else return int(bricks_.size());}
+		{if (use_priority_) return n_p0_; else return int((*bricks_).size());}
+
+		//for brkxml file
+		void set_data_file(vector<wstring *> *fname, int type);
+		int GetFileType() {return filetype_;}
+		wstring *GetFileName(int id);
+		bool isBrxml() {return brkxml_;}
+		bool buildPyramid(vector<Pyramid_Level> &pyramid, vector<vector<vector<vector<wstring *>>>> &filenames);
+		void set_FrameAndChannel(int fr, int ch);
+		void setLevel(int lv);
+		int GetCurLevel() {return pyramid_cur_lv_;}
+		int GetLevelNum() {return pyramid_.size();}
 
 	protected:
 		void build_bricks(vector<TextureBrick*> &bricks,
@@ -165,7 +177,7 @@ namespace FLIVR
 			int nc, int* nb);
 
 		//! data carved up to texture memory sized chunks.
-		vector<TextureBrick*>						bricks_;
+		vector<TextureBrick*>						*bricks_;
 		//for limited number of bricks during interactions
 		vector<TextureBrick*>						quota_bricks_;
 		//sort texture brick
@@ -203,6 +215,22 @@ namespace FLIVR
 		//priority
 		bool use_priority_;
 		int n_p0_;
+
+		//for brkxml
+		vector<wstring *> *filename_;
+		int filetype_;
+		ifstream ifs_;
+		bool brkxml_;
+
+		int pyramid_cur_lv_;
+		int pyramid_lv_num_;
+		vector<Pyramid_Level> pyramid_;
+		vector<vector<vector<vector<wstring *>>>> filenames_;
+
+		//used when brkxml_ is not equal to false.
+		vector<TextureBrick*> default_vec_;
+
+		void clearPyramid();
 
 		Nrrd* data_[TEXTURE_MAX_COMPONENTS];
 	};

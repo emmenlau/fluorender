@@ -160,6 +160,8 @@ namespace FLIVR
          // Returns true if it is visible.
          bool test_against_view(const BBox &bbox, bool use_ex=false);
 
+		 void clear_brick_buf();
+
          //memory swap
          static void set_mem_swap(bool val) {mem_swap_ = val;}
          static bool get_mem_swap() {return mem_swap_;}
@@ -172,6 +174,12 @@ namespace FLIVR
          //available memory
          static void set_available_mem(double val) {available_mem_ = val;}
          static double get_available_mem() {return available_mem_;}
+		 //main(cpu) memory limit
+         static void set_mainmem_buf_size(double val) {mainmem_buf_size_ = val;}
+         static double get_mainmem_buf_size() {return mainmem_buf_size_;}
+         //available main(cpu) memory
+         static void set_available_mainmem_buf_size(double val) {available_mainmem_buf_size_ = val;}
+         static double get_available_mainmem_buf_size() {return available_mainmem_buf_size_;}
          //large data size
          static void set_large_data_size(double val) {large_data_size_ = val;}
          static double get_large_data_size() {return large_data_size_;}
@@ -276,11 +284,20 @@ namespace FLIVR
                int blend_num_bits_;
                bool clear_pool_;
 
+			   struct LoadedBrick {
+				   bool swapped;
+				   TextureBrick *brk;
+			   };
+			   static vector<LoadedBrick> loadedbrks;
+			   static int del_id;
+			   
                //memory management
                static bool mem_swap_;
                static bool use_mem_limit_;
                static double mem_limit_;
                static double available_mem_;
+			   static double mainmem_buf_size_;
+			   static double available_mainmem_buf_size_;
                static double large_data_size_;
                static int force_brick_size_;
                static vector<TexParam> tex_pool_;
@@ -349,6 +366,8 @@ namespace FLIVR
                void bind_2d_weight();
                //bind 2d depth map for rendering shadows
                void bind_2d_dmap();
+
+			   void rearrangeLoadedBrkVec();
    };
 } // end namespace FLIVR
 

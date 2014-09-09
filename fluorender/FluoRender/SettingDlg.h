@@ -44,6 +44,8 @@ class SettingDlg : public wxPanel
 		ID_BlockSizeText,
 		ID_ResponseTimeSldr,
 		ID_ResponseTimeText,
+		ID_MainMemBufSizeSldr,
+		ID_MainMemBufSizeText,
 		//font
 		ID_FontCmb,
 		//script
@@ -105,6 +107,8 @@ public:
 	void SetResponseTime(int val) {m_up_time = val;}
 	int GetUpdateOrder() {return m_update_order;}
 	void SetUpdateOrder(int val) {m_update_order = val;}
+	double GetMainMemBufSize() {return m_main_mem_buf_size;}
+	void SetMainMemBufSize(double val) {m_main_mem_buf_size = val;}
 	//point volume mode
 	int GetPointVolumeMode() {return m_point_volume_mode;}
 	void SetPointVolumeMode(int mode) {m_point_volume_mode = mode;}
@@ -149,6 +153,7 @@ private:
 	double m_graphics_mem;	//in MB
 							//it's the user setting
 							//final value is determined by both reading from the card and this value
+	double m_main_mem_buf_size;	//in MB
 	double m_large_data_size;//data size considered as large and needs forced bricking
 	int m_force_brick_size;	//in pixels
 							//it's the user setting
@@ -197,6 +202,8 @@ private:
 	wxTextCtrl *m_block_size_text;
 	wxSlider *m_response_time_sldr;
 	wxTextCtrl *m_response_time_text;
+	wxSlider *m_main_mem_buf_sldr;
+	wxTextCtrl *m_main_mem_buf_text;
 	//font
 	wxComboBox *m_font_cmb;
 	//script
@@ -257,6 +264,8 @@ private:
 	void OnBlockSizeEdit(wxCommandEvent &event);
 	void OnResponseTimeChange(wxScrollEvent &event);
 	void OnResponseTimeEdit(wxCommandEvent &event);
+	void OnMainMemBufSizeChange(wxScrollEvent &event);
+	void OnMainMemBufSizeEdit(wxCommandEvent &event);
 	//font
 	void OnFontChange(wxCommandEvent &event);
 	//script

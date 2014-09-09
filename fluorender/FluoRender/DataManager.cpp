@@ -123,7 +123,7 @@ VolumeData::VolumeData()
 
 VolumeData::VolumeData(VolumeData &copy)
 {
-	m_reader = 0;
+	m_reader = copy.m_reader;
 	//duplication
 	m_dup = true;
 	copy.m_dup_counter++;
@@ -276,7 +276,7 @@ bool VolumeData::GetSkipBrick()
 	return m_skip_brick;
 }
 
-int VolumeData::Load(Nrrd* data, wxString &name, wxString &path)
+int VolumeData::Load(Nrrd* data, wxString &name, wxString &path, vector<Pyramid_Level> *pyramid, vector<vector<vector<vector<wstring *>>>> *filenames)
 {
 	if (!data || data->dim!=3)
 		return 0;
@@ -305,8 +305,12 @@ int VolumeData::Load(Nrrd* data, wxString &name, wxString &path)
 
 	m_tex = new Texture();
 	m_tex->set_use_priority(m_skip_brick);
-	m_tex->build(nv, gm, 0, 256, 0, 0);
-
+	if(pyramid)
+	{
+		if (!m_tex->buildPyramid(*pyramid, *filenames)) return 0;
+	}
+	else if(!m_tex->build(nv, gm, 0, 256, 0, 0)) return 0;
+	
 	if (m_tex)
 	{
 		if (m_vr)
@@ -3892,8 +3896,8 @@ int DataManager::LoadVolumeData(wxString &filename, int type, int ch_num, int t_
 			reader = new OIFReader();
 		else if (type == LOAD_TYPE_LSM)
 			reader = new LSMReader();
-		else if (type == LOAD_TYPE_PVXML)
-			reader = new PVXMLReader();
+		else if (type == LOAD_TYPE_BRKXML)
+			reader = new BRKXMLReader();
 
 		m_reader_list.push_back(reader);
 		wstring str_w = pathname.ToStdWstring();
@@ -3920,11 +3924,26 @@ int DataManager::LoadVolumeData(wxString &filename, int type, int ch_num, int t_
 		Nrrd* data = reader->Convert(t_num>=0?t_num:reader->GetCurTime(), i, true);
 		if (!data)
 			continue;
-		wxString name = wxString(reader->GetDataName());
-		if (chan > 1)
-			name += wxString::Format("_%d", i+1);
+		wxString name;
+		vector<Pyramid_Level> pyramid;
+		vector<vector<vector<vector<wstring *>>>> fnames;
+		int ftype = BRICK_FILE_TYPE_NONE;
+		if (type != LOAD_TYPE_BRKXML)
+		{
+			name = wxString(reader->GetDataName());
+			if (chan > 1)
+				name += wxString::Format("_%d", i+1);
+		}
+		else 
+		{
+			BRKXMLReader* breader = (BRKXMLReader*)reader;
+			breader->build_pyramid(pyramid, fnames, t_num>=0?t_num:reader->GetCurTime(), i);
+			name = wxString( breader->GetBrickFileName(t_num>=0?t_num:reader->GetCurTime(), i, 0) );
+			pathname = wxString( breader->GetBrickFilePath(t_num>=0?t_num:reader->GetCurTime(), i, 0) );
+		}
+
 		bool valid_spc = reader->IsSpcInfoValid();
-		if (vd && vd->Load(data, name, pathname))
+		if (vd && vd->Load(data, name, pathname, (type == LOAD_TYPE_BRKXML) ? &pyramid : NULL, (type == LOAD_TYPE_BRKXML) ? &fnames : NULL))
 		{
 			if (m_load_mask)
 			{

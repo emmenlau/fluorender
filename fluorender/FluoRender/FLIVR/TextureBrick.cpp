@@ -33,6 +33,7 @@
 #include <FLIVR/Utils.h>
 #include <utility>
 #include <iostream>
+#include <jpeglib.h>
 
 using namespace std;
 
@@ -42,9 +43,9 @@ namespace FLIVR
          int nx, int ny, int nz, int nc, int* nb,
          int ox, int oy, int oz,
          int mx, int my, int mz,
-         const BBox& bbox, const BBox& tbox)
+         const BBox& bbox, const BBox& tbox, int findex, long long offset, long long fsize)
       : nx_(nx), ny_(ny), nz_(nz), nc_(nc), ox_(ox), oy_(oy), oz_(oz),
-      mx_(mx), my_(my), mz_(mz), bbox_(bbox), tbox_(tbox)
+      mx_(mx), my_(my), mz_(mz), bbox_(bbox), tbox_(tbox), findex_(findex), offset_(offset), fsize_(fsize)
    {
       for (int i=0; i<TEXTURE_MAX_COMPONENTS; i++)
       {
@@ -81,6 +82,9 @@ namespace FLIVR
 
       //priority
       priority_ = 0;
+
+	  brkdata_ = NULL;
+	  id_in_loadedbrks = -1;
    }
 
    TextureBrick::~TextureBrick()
@@ -89,6 +93,8 @@ namespace FLIVR
       // This object never deletes that memory.
       data_[0] = 0;
       data_[1] = 0;
+
+	  if (brkdata_) delete [] brkdata_;
    }
 
    /* The cube is numbered in the following way
@@ -358,6 +364,14 @@ z
          return (int)data_[0]->axis[2].size;
    }
 
+   int TextureBrick::sz()
+   {
+      if (data_[0]->dim == 3)
+         return (int)data_[0]->axis[2].size;
+      else
+         return (int)data_[0]->axis[3].size;
+   }
+
    GLenum TextureBrick::tex_type_aux(Nrrd* n)
    {
       // GL_BITMAP!?
@@ -397,21 +411,39 @@ z
 
    void *TextureBrick::tex_data(int c)
    {
-      if (c >= 0 && data_[c])
-      {
-         unsigned char *ptr = (unsigned char *)(data_[c]->data);
-         long long offset = (long long)(oz()) *
-            (long long)(sx()) *
-            (long long)(sy()) +
-            (long long)(oy()) *
-            (long long)(sx()) +
-            (long long)(ox());
-         return ptr + offset * tex_type_size(tex_type(c));
-      }
-      else
-         return NULL;
+	   if (c >= 0 && data_[c])
+	   {
+		   if(data_[c]->data)
+		   {
+			   unsigned char *ptr = (unsigned char *)(data_[c]->data);
+			   long long offset = (long long)(oz()) * (long long)(sx()) * (long long)(sy()) +
+								  (long long)(oy()) * (long long)(sx()) +
+								  (long long)(ox());
+			   return ptr + offset * tex_type_size(tex_type(c));
+		   }
+	   }
+
+	   return NULL;
    }
 
+   void *TextureBrick::tex_data_brk(int c, wstring *fname, int filetype)
+   {
+	   unsigned char *ptr = NULL;
+	   if(brkdata_) ptr = (unsigned char *)(brkdata_);
+	   else
+	   {
+		   int bd = tex_type_size(tex_type(c));
+		   ptr = new unsigned char[nx_*ny_*nz_*bd];
+		   if (!read_brick((char *)ptr, nx_*ny_*nz_*bd, fname, filetype))
+		   {
+			   delete [] ptr;
+			   return NULL;
+		   }
+		   brkdata_ = (void *)ptr;
+	   }
+	   return ptr;
+   }
+   
    void TextureBrick::set_priority()
    {
       if (!data_[0])
@@ -457,7 +489,176 @@ z
             priority_ = 1;
          else
             priority_ = 0;
-      }
+	  }
    }
 
+   
+   void TextureBrick::set_priority_brk(ifstream* ifs, int filetype)
+   {
+/*	   if (!data_[0])
+      {
+         priority_ = 0;
+         return;
+      }
+      
+	  size_t vs = tex_type_size(tex_type(0));
+      if (vs == 1)
+      {
+         unsigned char max = 0;
+         unsigned char *ptr = NULL;
+		 if (brkdata_) ptr = (unsigned char *)(brkdata_);
+		 else {
+			 ptr = new unsigned char[nx_*ny_*nz_];
+			 if (!read_brick((char *)ptr, nx_*ny_*nz_*vs, ifs, filetype))
+			 {
+				 delete [] ptr;
+				 priority_ = 0;
+				 return;
+			 }
+		 }
+         for (int i=0; i<nx_; i++)
+            for (int j=0; j<ny_; j++)
+               for (int k=0; k<nz_; k++)
+               {
+                  long long index = (long long)(k) * (long long)(ny_) * (long long)(nx_) +
+									(long long)(j) * (long long)(nx_) + 
+									(long long)(i);
+                  max = ptr[index]>max?ptr[index]:max;
+               }
+         if (max == 0)
+            priority_ = 1;
+         else
+            priority_ = 0;
+
+		 if (!data_[0]->data) delete [] ptr;
+      }
+      else if (vs == 2)
+      {
+         unsigned short max = 0;
+         unsigned short *ptr;
+		 if (brkdata_) ptr = (unsigned short *)(brkdata_);
+		 else {
+			 ptr = new unsigned short[nx_*ny_*nz_];
+			 if (!read_brick((char *)ptr, nx_*ny_*nz_*vs, ifs, filetype))
+			 {
+				 delete [] ptr;
+				 priority_ = 0;
+				 return;
+			 }
+		 }
+         for (int i=0; i<nx_; i++)
+            for (int j=0; j<ny_; j++)
+               for (int k=0; k<nz_; k++)
+               {
+                  long long index = (long long)(k) * (long long)(ny_) * (long long)(nx_) +
+									(long long)(j) * (long long)(nx_) + 
+									(long long)(i);
+                  max = ptr[index]>max?ptr[index]:max;
+               }
+         if (max == 0)
+            priority_ = 1;
+         else
+            priority_ = 0;
+		 
+		 if (!brkdata_) delete [] ptr;
+      }
+*/   }
+
+   bool TextureBrick::read_brick(char* data, size_t size, std::wstring* fname, int filetype)
+   {
+	   if (!fname) return false;
+	   
+	   if (filetype == BRICK_FILE_TYPE_RAW)  return raw_brick_reader(data, size, fname);
+	   if (filetype == BRICK_FILE_TYPE_JPEG) return jpeg_brick_reader(data, size, fname);
+
+	   return false;
+   }
+
+   bool TextureBrick::raw_brick_reader(char* data, size_t size, std::wstring* fname)
+   {
+	   try
+	   {
+		   ifstream ifs;
+		   ifs.open(*fname, ios::binary);
+		   if (!ifs) return false;
+		   ifs.read(data, size);
+		   if (ifs) ifs.close();
+	   }
+	   catch (std::exception &e)
+	   {
+		   cerr << typeid(e).name() << "\n" << e.what() << endl;
+		   return false;
+	   }
+
+	   return true;
+   }
+
+   struct my_error_mgr {
+	   struct jpeg_error_mgr pub;	/* "public" fields */
+
+	   jmp_buf setjmp_buffer;	/* for return to caller */
+   };
+
+   typedef struct my_error_mgr * my_error_ptr;
+
+   METHODDEF(void)
+	   my_error_exit (j_common_ptr cinfo)
+   {
+	   /* cinfo->err really points to a my_error_mgr struct, so coerce pointer */
+	   my_error_ptr myerr = (my_error_ptr) cinfo->err;
+
+	   /* Always display the message. */
+	   /* We could postpone this until after returning, if we chose. */
+	   (*cinfo->err->output_message) (cinfo);
+
+	   /* Return control to the setjmp point */
+	   longjmp(myerr->setjmp_buffer, 1);
+   }
+
+   bool TextureBrick::jpeg_brick_reader(char* data, size_t size, std::wstring* fname)
+   {
+	   jpeg_decompress_struct cinfo;
+	   struct my_error_mgr jerr;
+	   
+	   FILE *fp = _wfopen(fname->c_str(), L"rb");
+	   if (!fp) return false;
+
+	   cinfo.err = jpeg_std_error(&jerr.pub);
+	   jerr.pub.error_exit = my_error_exit;
+	   /* Establish the setjmp return context for my_error_exit to use. */
+	   if (setjmp(jerr.setjmp_buffer)) {
+		   /* If we get here, the JPEG code has signaled an error.
+		   * We need to clean up the JPEG object, close the input file, and return.
+		   */
+		   jpeg_destroy_decompress(&cinfo);
+		   fclose(fp);
+		   return false;
+	   }
+	   jpeg_create_decompress(&cinfo);
+	   jpeg_stdio_src(&cinfo, fp);
+	   jpeg_read_header(&cinfo, TRUE);
+	   jpeg_start_decompress(&cinfo);
+	   
+	   if(cinfo.jpeg_color_space != JCS_GRAYSCALE || cinfo.output_components != 1) longjmp(jerr.setjmp_buffer, 1);
+	   
+	   size_t jpgsize = cinfo.output_width * cinfo.output_height;
+	   if (jpgsize != size) longjmp(jerr.setjmp_buffer, 1);
+	   unsigned char *ptr[1];
+	   ptr[0] = (unsigned char *)data;
+	   while (cinfo.output_scanline < cinfo.output_height) {
+		   ptr[0] = (unsigned char *)data + cinfo.output_scanline * cinfo.output_width;
+		   jpeg_read_scanlines(&cinfo, ptr, 1);
+	   }
+
+	   jpeg_destroy_decompress(&cinfo);
+	   fclose(fp);
+	   
+	   return true;
+   }
+
+   void TextureBrick::freeBrkData()
+   {
+	   if (brkdata_) delete [] brkdata_;
+	   brkdata_ = NULL;
+   }
 } // end namespace FLIVR

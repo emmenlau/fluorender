@@ -41,6 +41,8 @@ BEGIN_EVENT_TABLE(SettingDlg, wxPanel)
 	EVT_TEXT(ID_BlockSizeText, SettingDlg::OnBlockSizeEdit)
 	EVT_COMMAND_SCROLL(ID_ResponseTimeSldr, SettingDlg::OnResponseTimeChange)
 	EVT_TEXT(ID_ResponseTimeText, SettingDlg::OnResponseTimeEdit)
+	EVT_COMMAND_SCROLL(ID_MainMemBufSizeSldr, SettingDlg::OnMainMemBufSizeChange)
+	EVT_TEXT(ID_MainMemBufSizeText, SettingDlg::OnMainMemBufSizeEdit)
 	//font
 	EVT_COMBOBOX(ID_FontCmb, SettingDlg::OnFontChange)
 	//script
@@ -298,11 +300,32 @@ wxWindow* SettingDlg::CreatePerformancePage(wxWindow *parent)
 	group2->Add(st);
 	group2->Add(10, 5);
 
+	wxBoxSizer *group3 = new wxStaticBoxSizer(
+		new wxStaticBox(page, wxID_ANY, "Main Memory Buffer"), wxVERTICAL);
+	wxBoxSizer *sizer3_1 = new wxBoxSizer(wxHORIZONTAL);
+	st = new wxStaticText(page, 0, "Buffer Size:",
+		wxDefaultPosition, wxSize(110, -1));
+	sizer3_1->Add(st);
+	m_main_mem_buf_sldr = new wxSlider(page, ID_MainMemBufSizeSldr, 40, 0, 200,
+		wxDefaultPosition, wxDefaultSize, wxSL_HORIZONTAL);
+	m_main_mem_buf_text = new wxTextCtrl(page, ID_MainMemBufSizeText, "4000",
+		wxDefaultPosition, wxSize(40, -1), 0, vald_int);
+	st = new wxStaticText(page, 0, "MB",
+		wxDefaultPosition, wxSize(20, -1));
+	sizer3_1->Add(m_main_mem_buf_sldr, 1, wxEXPAND|wxALIGN_CENTER);
+	sizer3_1->Add(m_main_mem_buf_text, 0, wxALIGN_CENTER);
+	sizer3_1->Add(st);
+	group3->Add(10, 5);
+	group3->Add(sizer3_1, 0, wxEXPAND);
+	group3->Add(10, 5);
+
 	wxBoxSizer *sizerV = new wxBoxSizer(wxVERTICAL);
 	sizerV->Add(10, 10);
 	sizerV->Add(group1, 0, wxEXPAND);
 	sizerV->Add(10, 10);
 	sizerV->Add(group2, 0, wxEXPAND);
+	sizerV->Add(10, 10);
+	sizerV->Add(group3, 0, wxEXPAND);
 
 	page->SetSizer(sizerV);
 	return page;
@@ -478,6 +501,7 @@ void SettingDlg::GetSettings()
 	m_text_font = BITMAP_FONT_TYPE_HELVETICA_12;
 	m_mem_swap = false;
 	m_graphics_mem = 1000.0;
+	m_main_mem_buf_size = 4000.0;
 	m_large_data_size = 1000.0;
 	m_force_brick_size = 128;
 	m_up_time = 100;
@@ -604,6 +628,8 @@ void SettingDlg::GetSettings()
 		fconfig.Read("mem swap", &m_mem_swap);
 		//graphics memory limit
 		fconfig.Read("graphics mem", &m_graphics_mem);
+		//main memory buffer size
+		fconfig.Read("main memory buffer size", &m_main_mem_buf_size);
 		//large data size
 		fconfig.Read("large data size", &m_large_data_size);
 		//force brick size
@@ -691,6 +717,7 @@ void SettingDlg::UpdateUI()
 	m_large_data_text->SetValue(wxString::Format("%d", (int)m_large_data_size));
 	m_block_size_text->SetValue(wxString::Format("%d", m_force_brick_size));
 	m_response_time_text->SetValue(wxString::Format("%d", m_up_time));
+	m_main_mem_buf_text->SetValue(wxString::Format("%d", (int)m_main_mem_buf_size));
 }
 
 void SettingDlg::SaveSettings()
@@ -762,6 +789,7 @@ void SettingDlg::SaveSettings()
 	fconfig.Write("large data size", m_large_data_size);
 	fconfig.Write("force brick size", m_force_brick_size);
 	fconfig.Write("up time", m_up_time);
+	fconfig.Write("main memory buffer size", m_main_mem_buf_size);
 
 	//update order
 	fconfig.SetPath("/update order");
@@ -1230,6 +1258,24 @@ void SettingDlg::OnResponseTimeEdit(wxCommandEvent &event)
 		return;
 	m_response_time_sldr->SetValue(int(val/10.0));
 	m_up_time = val;
+}
+
+void SettingDlg::OnMainMemBufSizeChange(wxScrollEvent &event)
+{
+	int ival = event.GetPosition();
+	wxString str = wxString::Format("%d", ival*100);
+	m_main_mem_buf_text->SetValue(str);
+}
+
+void SettingDlg::OnMainMemBufSizeEdit(wxCommandEvent &event)
+{
+	wxString str = m_main_mem_buf_text->GetValue();
+	double val;
+	str.ToDouble(&val);
+	if (val<=0.0)
+		return;
+	m_main_mem_buf_sldr->SetValue(int(val/100.0));
+	m_main_mem_buf_size = val;
 }
 
 //font

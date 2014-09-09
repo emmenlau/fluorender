@@ -2538,6 +2538,9 @@ void VRenderGLView::DrawVolumesComp(vector<VolumeData*> &list, int peel, bool ma
       VolumeData* vd = list[i];
       if (!vd || !vd->GetDisp())
          continue;
+
+	  //switchLevel(vd);
+
       if (mask)
       {
          //when run script
@@ -2601,6 +2604,56 @@ void VRenderGLView::DrawVolumesComp(vector<VolumeData*> &list, int peel, bool ma
          }
       }
    }
+}
+
+void VRenderGLView::switchLevel(VolumeData *vd)
+{
+	if(!vd) return;
+
+	int nx, ny;
+	nx = GetSize().x;
+	ny = GetSize().y;
+
+	Texture *vtex = vd->GetTexture();
+	if (vtex && vtex->isBrxml())
+	{
+		BRKXMLReader *br = (BRKXMLReader *)vd->GetReader();
+		vector<double> sfs;
+		vector<double> spx, spy, spz;
+		int lvnum = br->GetLevelNum();
+		for (int i = 0; i < lvnum; i++)
+		{
+			double aspect = (double)nx / (double)ny;
+
+			br->SetLevel(i);
+			double spc_x = br->GetXSpc();
+			double spc_y = br->GetYSpc();
+			double spc_z = br->GetZSpc();
+			spc_x = spc_x<EPS?1.0:spc_x;
+			spc_y = spc_y<EPS?1.0:spc_y;
+
+			spx.push_back(spc_x);
+			spy.push_back(spc_y);
+			spz.push_back(spc_z);
+
+			double sf;
+			if (aspect > 1.0)
+				sf = 2.0*m_radius/spc_y/double(ny);
+			else
+				sf = 2.0*m_radius/spc_x/double(nx);
+			sfs.push_back(sf);
+		}
+		int lv = lvnum - 1;
+		for (int i = lvnum - 1; i >= 0; i--)
+		{
+			if (m_scale_factor > sfs[i]) lv = i - 1;
+		}
+		if (lv < 0) lv = 0;
+		if (m_interactive) lv++;
+		if (lv >= lvnum) lv = lvnum - 1;
+		vtex->setLevel(lv);
+		vd->SetSpacings(spx[lv], spy[lv], spz[lv]);
+	}
 }
 
 void VRenderGLView::DrawOVER(VolumeData* vd, GLuint tex, int peel)
@@ -3678,6 +3731,9 @@ void VRenderGLView::DrawVolumesMulti(vector<VolumeData*> &list, int peel)
    {
       if (list[i] && list[i]->GetDisp())
       {
+		 
+		 //switchLevel(list[i]);
+
          VolumeRenderer* vr = list[i]->GetVR();
          if (vr)
          {
@@ -4682,40 +4738,57 @@ void VRenderGLView::Set4DSeqFrame(int frame, bool run_script)
       {
          BaseReader* reader = vd->GetReader();
 
-         double spcx, spcy, spcz;
-         vd->GetSpacings(spcx, spcy, spcz);
+		 Texture *tex = vd->GetTexture();
+		 if(tex->isBrxml())
+		 {
+			 BRKXMLReader *br = (BRKXMLReader *)reader;
+			 br->SetCurTime(frame);
+			 int curlv = tex->GetCurLevel();
+			 for (int j = 0; j < br->GetLevelNum(); j++)
+			 {
+				 tex->setLevel(j);
+				 if (vd->GetVR()) vd->GetVR()->clear_brick_buf();
+			 }
+			 tex->setLevel(curlv);
+			 tex->set_FrameAndChannel(frame, vd->GetCurChannel());
+			 vd->SetCurTime(reader->GetCurTime());
+		 }
+		 else
+		 {
+			 double spcx, spcy, spcz;
+			 vd->GetSpacings(spcx, spcy, spcz);
 
-         Nrrd* data = reader->Convert(frame, vd->GetCurChannel(), false);
-         if (!vd->Replace(data, false))
-            continue;
+			 Nrrd* data = reader->Convert(frame, vd->GetCurChannel(), false);
+			 if (!vd->Replace(data, false))
+				 continue;
 
-         vd->SetCurTime(reader->GetCurTime());
-         vd->SetSpacings(spcx, spcy, spcz);
+			 vd->SetCurTime(reader->GetCurTime());
+			 vd->SetSpacings(spcx, spcy, spcz);
 
-         //run script
-         if (m_run_script && run_script)
-         {
+			 //run script
+			 if (m_run_script && run_script)
+			 {
 #ifdef _WIN32
-             wchar_t slash = '\\';
+				 wchar_t slash = '\\';
 #else
-             wchar_t slash = '/';
+				 wchar_t slash = '/';
 #endif
-            wxString pathname = reader->GetPathName();
-            int pos = pathname.Find(slash, true);
-            wxString scriptname = pathname.Left(pos+1) + "script_4d.txt";
-            if (wxFileExists(scriptname))
-            {
-               m_selector.SetVolume(vd);
-               m_calculator.SetVolumeA(vd);
-               m_cur_vol = vd;
-               Run4DScript(scriptname);
-            }
-         }
+				 wxString pathname = reader->GetPathName();
+				 int pos = pathname.Find(slash, true);
+				 wxString scriptname = pathname.Left(pos+1) + "script_4d.txt";
+				 if (wxFileExists(scriptname))
+				 {
+					 m_selector.SetVolume(vd);
+					 m_calculator.SetVolumeA(vd);
+					 m_cur_vol = vd;
+					 Run4DScript(scriptname);
+				 }
+			 }
 
-         //update rulers
-         if (vframe && vframe->GetMeasureDlg())
-            vframe->GetMeasureDlg()->UpdateList();
-
+			 //update rulers
+			 if (vframe && vframe->GetMeasureDlg())
+				 vframe->GetMeasureDlg()->UpdateList();
+		 }
          if (vd->GetVR())
             vd->GetVR()->clear_tex_pool();
       }
@@ -5540,6 +5613,8 @@ void VRenderGLView::OnDraw(wxPaintEvent& event)
 
    PreDraw();
 
+   if (VolumeRenderer::get_done_update_loop()) StartLoopUpdate();
+
    switch (m_draw_type)
    {
    case 1:  //draw volumes only
@@ -6122,7 +6197,7 @@ DataGroup* VRenderGLView::AddVolumeData(VolumeData* vd, wxString group_name)
          adjust_view->UpdateSync();
       }
    }
-
+   glHint(GL_POINT_SMOOTH_HINT, GL_DONT_CARE);
    return group;
 }
 
@@ -6265,24 +6340,24 @@ void VRenderGLView::RemoveGroup(wxString &name)
                m_vd_pop_dirty = true;
             }
          }
-      case 6://mesh group
-         {
-            MeshGroup* group = (MeshGroup*)m_layer_list[i];
-            if (group && group->GetName() == name)
-            {
-               for (j=group->GetMeshNum()-1; j>=0; j--)
-               {
-                  MeshData* md = group->GetMeshData(j);
-                  if (md)
-                  {
-                     group->RemoveMeshData(j);
-                  }
-               }
-               m_layer_list.erase(m_layer_list.begin()+i);
-               delete group;
-               m_md_pop_dirty = true;
-            }
-         }
+//      case 6://mesh group
+//         {
+//            MeshGroup* group = (MeshGroup*)m_layer_list[i];
+//            if (group && group->GetName() == name)
+//            {
+//               for (j=group->GetMeshNum()-1; j>=0; j--)
+//               {
+//                  MeshData* md = group->GetMeshData(j);
+//                  if (md)
+//                  {
+//                     group->RemoveMeshData(j);
+//                  }
+//               }
+//               m_layer_list.erase(m_layer_list.begin()+i);
+//               delete group;
+//               m_md_pop_dirty = true;
+//            }
+//         }
       }
    }
 }
@@ -8409,6 +8484,7 @@ void VRenderGLView::StartLoopUpdate()
             Texture* tex = vd->GetTexture();
             if (tex)
             {
+			   switchLevel(vd);
                vector<TextureBrick*> *bricks = tex->get_bricks();
                if (!bricks || bricks->size()==0)
                   continue;
@@ -10660,7 +10736,7 @@ void VRenderView::ResetID()
 wxGLContext* VRenderView::GetContext()
 {
    if (m_glview)
-      return m_glview->GetContext();
+      return m_glview->m_glRC;
    else
       return 0;
 }

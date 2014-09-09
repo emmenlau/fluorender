@@ -9,6 +9,7 @@
 #include "FLIVR/Point.h"
 #include "FLIVR/MeshRenderer.h"
 #include "FLIVR/VolumeRenderer.h"
+#include "FLIVR/TextureBrick.h"
 #include <wx/wfstream.h>
 #include <wx/fileconf.h>
 #include "Formats/base_reader.h"
@@ -23,6 +24,7 @@
 #include "Formats/lsm_reader.h"
 #include "Formats/lbl_reader.h"
 #include "Formats/pvxml_reader.h"
+#include "Formats/brkxml_reader.h"
 
 #ifndef _DATAMANAGER_H_
 #define _DATAMANAGER_H_
@@ -40,6 +42,7 @@ using namespace FLIVR;
 #define LOAD_TYPE_OIF		4
 #define LOAD_TYPE_LSM		5
 #define LOAD_TYPE_PVXML		6
+#define LOAD_TYPE_BRKXML	7
 
 class TreeLayer
 {
@@ -145,7 +148,7 @@ public:
 	void SetSkipBrick(bool skip);
 	bool GetSkipBrick();
 	//load
-	int Load(Nrrd* data, wxString &name, wxString &path);
+	int Load(Nrrd* data, wxString &name, wxString &path, vector<Pyramid_Level> *pyramid = NULL, vector<vector<vector<vector<wstring *>>>> *filenames = NULL);
 	int Replace(Nrrd* data, bool del_tex);
 	int Replace(VolumeData* data);
 	//empty data

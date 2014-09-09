@@ -45,6 +45,8 @@ namespace FLIVR
 	bool TextureRenderer::use_mem_limit_ = false;
 	double TextureRenderer::mem_limit_ = 0.0;
 	double TextureRenderer::available_mem_ = 0.0;
+	double TextureRenderer::mainmem_buf_size_ = 0.0;
+	double TextureRenderer::available_mainmem_buf_size_ = 0.0;
 	double TextureRenderer::large_data_size_ = 0.0;
 	int TextureRenderer::force_brick_size_ = 0;
 	vector<TexParam> TextureRenderer::tex_pool_;
@@ -66,6 +68,9 @@ namespace FLIVR
 	int TextureRenderer::quota_bricks_ = 0;
 	Point TextureRenderer::quota_center_;
 	int TextureRenderer::update_order_ = 0;
+
+	vector<TextureRenderer::LoadedBrick> TextureRenderer::loadedbrks;
+	int TextureRenderer::del_id = 0;
 
 	TextureRenderer::TextureRenderer(Texture* tex)
 		:
@@ -522,10 +527,10 @@ namespace FLIVR
 				GLenum format = (nb == 1 ? GL_LUMINANCE : GL_RGBA);
 				if (glTexImage3D)
 				{
-					glTexImage3D(GL_TEXTURE_3D, 0, internal_format, nx, ny, nz, 0, format,
-					brick->tex_type(c), 0);
-					glTexSubImage3D(GL_TEXTURE_3D, 0, 0, 0, 0, nx, ny, nz, format,
-					brick->tex_type(c), brick->tex_data(c));
+					//glTexImage3D(GL_TEXTURE_3D, 0, internal_format, nx, ny, nz, 0, format,
+					//brick->tex_type(c), 0);
+					//glTexSubImage3D(GL_TEXTURE_3D, 0, 0, 0, 0, nx, ny, nz, format,
+					//brick->tex_type(c), brick->tex_data(c));
 				}
 			}
 
@@ -554,7 +559,7 @@ namespace FLIVR
 		int ny = brick->ny();
 		int nz = brick->nz();
 		GLenum textype = brick->tex_type(c);
-
+		
 		//! Try to find the existing texture in tex_pool_, for this brick.
 		int idx = -1;
 		for(unsigned int i = 0; i < tex_pool_.size() && idx < 0; i++)
@@ -614,10 +619,10 @@ namespace FLIVR
 			{
 				if (glTexImage3D)
 				{
-					glTexImage3D(GL_TEXTURE_3D, 0, GL_R32UI, nx, ny, nz, 0, GL_RED_INTEGER,
-					brick->tex_type(c), brick->tex_data(c));
-					glTexSubImage3D(GL_TEXTURE_3D, 0, 0, 0, 0, nx, ny, nz, GL_RED_INTEGER,
-					brick->tex_type(c), brick->tex_data(c));
+					//glTexImage3D(GL_TEXTURE_3D, 0, GL_R32UI, nx, ny, nz, 0, GL_RED_INTEGER,
+					//brick->tex_type(c), brick->tex_data(c));
+					//glTexSubImage3D(GL_TEXTURE_3D, 0, 0, 0, 0, nx, ny, nz, GL_RED_INTEGER,
+					//brick->tex_type(c), brick->tex_data(c));
 				}
 			}
 
@@ -792,8 +797,16 @@ namespace FLIVR
 			glTexParameteri(GL_TEXTURE_3D, GL_TEXTURE_MAG_FILTER, filter);
 
 			// download texture data
-			glPixelStorei(GL_UNPACK_ROW_LENGTH, brick->sx());
-			glPixelStorei(GL_UNPACK_IMAGE_HEIGHT, brick->sy());
+			if(tex_->isBrxml())
+			{
+				glPixelStorei(GL_UNPACK_ROW_LENGTH, nx);
+				glPixelStorei(GL_UNPACK_IMAGE_HEIGHT, ny);
+			}
+			else
+			{
+				glPixelStorei(GL_UNPACK_ROW_LENGTH, brick->sx());
+				glPixelStorei(GL_UNPACK_IMAGE_HEIGHT, brick->sy());
+			}
 			glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
 
 			if (ShaderProgram::shaders_supported())
@@ -825,15 +838,85 @@ namespace FLIVR
 
 				if (glTexImage3D)
 				{
-					glTexImage3D(GL_TEXTURE_3D, 0, internal_format, nx, ny, nz, 0, format,
-						brick->tex_type(c), 0);
-					glTexSubImage3D(GL_TEXTURE_3D, 0, 0, 0, 0, nx, ny, nz, format,
-						brick->tex_type(c), brick->tex_data(c));
+					if(tex_->isBrxml())
+					{
+						bool brkerror = false;
+						bool lb_swapped = false;
+						if (brick->isLoaded())
+						{
+							if (brick->get_id_in_loadedbrks() >= 0 && brick->get_id_in_loadedbrks() < loadedbrks.size())
+							{
+								loadedbrks[brick->get_id_in_loadedbrks()].swapped = true;
+								lb_swapped = true;
+							}
+							else
+								brkerror = true;
+						}
+						else if(mainmem_buf_size_ >= 1.0)
+						{
+							double bsize = brick->nx()*brick->ny()*brick->nz()*brick->nb(c)/1.04e6;
+							if(available_mainmem_buf_size_ - bsize < 0.0)
+							{
+								double free_mem_size = 0.0;
+								while (free_mem_size < bsize && del_id < loadedbrks.size() )
+								{
+									TextureBrick* b = loadedbrks[del_id].brk;
+									if(!loadedbrks[del_id].swapped && b->isLoaded()){
+										b->freeBrkData();
+										free_mem_size += b->nx() * b->ny() * b->nz() * b->nb(0) / 1.04e6;
+									}
+									del_id++;
+								}
+								available_mainmem_buf_size_ += free_mem_size;
+							}
+						}
+						wstring *test = tex_->GetFileName(brick->getID());
+//						glTexImage3D(GL_TEXTURE_3D, 0, internal_format, nx, ny, nz, 0, format,
+//							brick->tex_type(c), brick->tex_data_brk(c, test, tex_->GetFileType()));
+						glTexImage3D(GL_TEXTURE_3D, 0, internal_format, nx, ny, nz, 0, format,
+							brick->tex_type(c), 0);
+						glTexSubImage3D(GL_TEXTURE_3D, 0, 0, 0, 0, nx, ny, nz, format, brick->tex_type(c), brick->tex_data_brk(c, test, tex_->GetFileType()));
+						if (mainmem_buf_size_ == 0.0) brick->freeBrkData();
+						else 
+						{
+							if (brkerror)
+							{
+								brick->freeBrkData();
+
+								double new_mem = brick->nx()*brick->ny()*brick->nz()*brick->nb(c)/1.04e6;
+								available_mainmem_buf_size_ += new_mem;
+							}
+							else
+							{
+								if(!lb_swapped)
+								{
+									double new_mem = brick->nx()*brick->ny()*brick->nz()*brick->nb(c)/1.04e6;
+									available_mainmem_buf_size_ -= new_mem;
+								}
+
+								LoadedBrick lb;
+								lb.swapped = false;
+								lb.brk = brick;
+								lb.brk->set_id_in_loadedbrks(loadedbrks.size());
+								loadedbrks.push_back(lb);
+
+							}
+
+						}
+					}
+					else
+					{
+						glTexImage3D(GL_TEXTURE_3D, 0, internal_format, nx, ny, nz, 0, format,
+							brick->tex_type(c), 0);
+						glTexSubImage3D(GL_TEXTURE_3D, 0, 0, 0, 0, nx, ny, nz, format, brick->tex_type(c), brick->tex_data(c));
+					}
+
 					if (mem_swap_)
 					{
 						double new_mem = brick->nx()*brick->ny()*brick->nz()*brick->nb(c)/1.04e6;
 						available_mem_ -= new_mem;
 					}
+
 				}
 			}
 
@@ -982,8 +1065,41 @@ namespace FLIVR
 		}
 	}
 
-} // namespace FLIVR
+	void TextureRenderer::rearrangeLoadedBrkVec()
+	{
+		if (loadedbrks.empty()) return;
+		vector<LoadedBrick>::iterator ite = loadedbrks.begin();
+		while (ite != loadedbrks.end())
+		{
+			if (!ite->brk->isLoaded())
+			{
+				ite->brk->set_id_in_loadedbrks(-1);
+				ite = loadedbrks.erase(ite);
+			}
+			else if(ite->swapped)
+			{
+				ite = loadedbrks.erase(ite);
+			}
+			else ite++;
+		}
+		for (int i = 0; i < loadedbrks.size(); i++) loadedbrks[i].brk->set_id_in_loadedbrks(i);
+		del_id = 0;
+	}
 
+	void TextureRenderer::clear_brick_buf()
+	{
+		vector<TextureBrick *> *bs = tex_->get_bricks();
+		for (unsigned int i = 0; i < bs->size(); i++)
+		{
+			if((*bs)[i]->isLoaded()){
+				available_mainmem_buf_size_ += (*bs)[i]->nx() * (*bs)[i]->ny() * (*bs)[i]->nz() * (*bs)[i]->nb(0);
+				(*bs)[i]->freeBrkData();
+			}
+		}
+		loadedbrks.clear();
+	}
+
+} // namespace FLIVR
 
 
 

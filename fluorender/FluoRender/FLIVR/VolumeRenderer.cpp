@@ -476,7 +476,6 @@ namespace FLIVR
 		if (!bricks || bricks->size() == 0)
 			return;
 
-		set_interactive_mode(adaptive_ && interactive_mode_p);
 
 		// Set sampling rate based on interaction
 		double rate = imode_ ? irate_ : sampling_rate_;
@@ -749,16 +748,19 @@ namespace FLIVR
 		glMultMatrixd(mvmat);
 		float matrix[16];
 
+		if (cur_chan_brick_num_ == 0) rearrangeLoadedBrkVec();
+
 		for (unsigned int i=0; i < bricks->size(); i++)
 		{
 			//comment off when debug_ds
+			
 			if (mem_swap_)
 			{
 				uint32_t rn_time = GET_TICK_COUNT();
 				if (rn_time - st_time_ > get_up_time())
 					break;
 			}
-
+			
 			TextureBrick* b = (*bricks)[i];
 			if (mem_swap_ && start_update_loop_ && !done_update_loop_)
 			{
@@ -838,7 +840,9 @@ namespace FLIVR
 
 		if (mem_swap_ &&
 			cur_brick_num_ == total_brick_num_)
+		{
 			done_update_loop_ = true;
+		}
 		if (mem_swap_ &&
 			cur_chan_brick_num_ == (*bricks).size())
 		{

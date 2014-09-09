@@ -461,6 +461,9 @@ m_free_version(true)
       vrv->m_glview->SetSyncB(sync_b);
    }
 
+   TextureRenderer::set_mainmem_buf_size(m_setting_dlg->GetMainMemBufSize());
+   TextureRenderer::set_available_mainmem_buf_size(m_setting_dlg->GetMainMemBufSize());
+
    //drop target
    SetDropTarget(new DnDFile(this));
     
@@ -775,7 +778,7 @@ void VRenderFrame::LoadVolumes(wxArrayString files, VRenderView* view)
          else if (suffix==".lsm")
             ch_num = m_data_mgr.LoadVolumeData(filename, LOAD_TYPE_LSM);
          else if (suffix==".xml")
-            ch_num = m_data_mgr.LoadVolumeData(filename, LOAD_TYPE_PVXML);
+            ch_num = m_data_mgr.LoadVolumeData(filename, LOAD_TYPE_BRKXML);
 
          if (ch_num > 1)
          {
@@ -2645,7 +2648,7 @@ void VRenderFrame::OpenProject(wxString& filename)
                else if (suffix == ".lsm")
                   loaded_num = m_data_mgr.LoadVolumeData(str, LOAD_TYPE_LSM, cur_chan, cur_time);
                else if (suffix == ".xml")
-                  loaded_num = m_data_mgr.LoadVolumeData(str, LOAD_TYPE_PVXML, cur_chan, cur_time);
+                  loaded_num = m_data_mgr.LoadVolumeData(str, LOAD_TYPE_BRKXML, cur_chan, cur_time);
             }
             VolumeData* vd = 0;
             if (loaded_num)
@@ -4204,4 +4207,3 @@ void VRenderFrame::OnKeyDown(wxKeyEvent& event)
 {
    event.Skip();
 }
-

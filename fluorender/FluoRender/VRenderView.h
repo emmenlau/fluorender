@@ -846,6 +846,8 @@ class VRenderGLView: public wxGLCanvas
          void OnKeyDown(wxKeyEvent& event);
          //WXLRESULT MSWWindowProc(WXUINT message, WXWPARAM wParam, WXLPARAM lParam);
 
+		 void switchLevel(VolumeData *vd);
+
          DECLARE_EVENT_TABLE();
 
          friend class VRenderView;

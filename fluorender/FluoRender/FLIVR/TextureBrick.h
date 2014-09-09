@@ -29,12 +29,15 @@
 #ifndef SLIVR_TextureBrick_h
 #define SLIVR_TextureBrick_h
 
+
 #include "GL/glew.h"
 #include "Ray.h"
 #include "BBox.h"
 #include "Plane.h"
 
 #include <vector>
+#include <fstream>
+#include <string>
 #include <nrrd.h>
 
 namespace FLIVR {
@@ -49,6 +52,10 @@ namespace FLIVR {
 	//these are the render modes used to determine if each mode is drawn
 #define TEXTURE_RENDER_MODES	4
 
+#define BRICK_FILE_TYPE_NONE	0
+#define BRICK_FILE_TYPE_RAW		1
+#define BRICK_FILE_TYPE_JPEG	2
+
 	class TextureBrick
 	{
 	public:
@@ -59,7 +66,7 @@ namespace FLIVR {
 		// Creator of the brick owns the nrrd memory.
 		TextureBrick(Nrrd* n0, Nrrd* n1,
 			int nx, int ny, int nz, int nc, int* nb, int ox, int oy, int oz,
-			int mx, int my, int mz, const BBox& bbox, const BBox& tbox);
+			int mx, int my, int mz, const BBox& bbox, const BBox& tbox, int findex = 0, long long offset = 0LL, long long fsize = 0LL);
 		virtual ~TextureBrick();
 
 		inline BBox &bbox() { return bbox_; }
@@ -103,6 +110,7 @@ namespace FLIVR {
 
 		virtual int sx();
 		virtual int sy();
+		virtual int sz();
 
 		inline void set_drawn(int mode, bool val)
 		{ if (mode>=0 && mode<TEXTURE_RENDER_MODES) drawn_[mode] = val; }
@@ -119,11 +127,13 @@ namespace FLIVR {
 
 		//find out priority
 		void set_priority();
+		void set_priority_brk(std::ifstream* ifs, int filetype);
 		inline int get_priority() {return priority_;}
 
 		virtual GLenum tex_type(int c);
 		virtual void* tex_data(int c);
-
+		virtual void* tex_data_brk(int c, std::wstring* fname, int filetype);
+		
 		void compute_polygons(Ray& view, double tmin, double tmax, double dt,
 			vector<double>& vertex, vector<double>& texcoord,
 			vector<int>& size);
@@ -146,11 +156,21 @@ namespace FLIVR {
 		inline void set_ind(size_t ind) {ind_ = ind;}
 		inline size_t get_ind() {return ind_;}
 
+		void freeBrkData();
+		bool isLoaded() {return brkdata_ ? true : false;};
+		void set_id_in_loadedbrks(int id) {id_in_loadedbrks = id;};
+		int get_id_in_loadedbrks() {return id_in_loadedbrks;}
+		int getID() {return findex_;}
+
 	private:
 		void compute_edge_rays(BBox &bbox);
 		void compute_edge_rays_tex(BBox &bbox);
 		size_t tex_type_size(GLenum t);
 		GLenum tex_type_aux(Nrrd* n);
+
+		bool read_brick(char* data, size_t size, std::wstring* fname, int filetype);
+		bool raw_brick_reader(char* data, size_t size, std::wstring* fname);
+		bool jpeg_brick_reader(char* data, size_t size, std::wstring* fname);
 
 		//! bbox edges
 		Ray edge_[12]; 
@@ -185,6 +205,20 @@ namespace FLIVR {
 		bool drawn_[TEXTURE_RENDER_MODES];
 		//current index in the queue, for reverse searching
 		size_t ind_;
+
+		long long offset_;
+		long long fsize_;
+		void *brkdata_;
+		int id_in_loadedbrks;
+
+		int findex_;
+	};
+
+	struct Pyramid_Level {
+			std::vector<std::wstring *> *filenames;
+			int filetype;
+			Nrrd* data;
+			std::vector<TextureBrick *> bricks;
 	};
 
 } // namespace FLIVR

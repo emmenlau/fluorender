@@ -311,6 +311,7 @@ void DataListCtrl::AddToView(int menu_index, long item)
       (*vr_frame->GetViewList())[menu_index]->RefreshGL();
       vr_frame->UpdateTree(name);
    }
+   glHint(GL_POINT_SMOOTH_HINT, GL_DONT_CARE);
 }
 
 void DataListCtrl::OnAddToView(wxCommandEvent& event)
