@@ -24,6 +24,7 @@
 #include "compatibility.h"
 
 #include <wx/wx.h>
+#include <wx/menu.h>
 #include <wx/aui/aui.h>
 
 #include <vector>
@@ -42,7 +43,7 @@ using namespace std;
 
 #define UITEXT_DATAVIEW		"Datasets"
 #define UITEXT_TREEVIEW		"Workspace"
-#define UITEXT_MAKEMOVIE	"Export"
+#define UITEXT_MAKEMOVIE	"Record/Export"
 #define UITEXT_ADJUST		"Output Adjustments"
 #define UITEXT_CLIPPING		"Clipping Planes"
 #define UITEXT_PROPERTIES	"Properties"
@@ -91,6 +92,7 @@ class VRenderFrame: public wxFrame
 		ID_Facebook,
 		ID_Twitter,
 		ID_Info,
+		ID_ShowHideToolbar
 	};
 
 public:
@@ -248,11 +250,25 @@ public:
 	//tex renderer settings
 	void SetTextureRendererSettings();
 
+	//quit option
+	void OnQuit(wxCommandEvent& WXUNUSED(event))
+	{ Close(true); }
+
+public: //public so export window can see it and set it. 
+	RecorderDlg* m_recorder_dlg;
+
 private:
 	wxAuiManager m_aui_mgr;
 	wxMenu* m_tb_menu_ui;
 	wxMenu* m_tb_menu_edit;
 	wxToolBar* m_main_tb;
+	//main top menu
+	wxMenuBar* m_top_menu;
+	wxMenu* m_top_file;
+	wxMenu* m_top_tools;
+	wxMenu* m_top_window;
+	wxMenu* m_top_help;
+
 	TreePanel *m_tree_panel;
 	ListPanel *m_list_panel;
 	VMovieView* m_movie_view;
@@ -268,7 +284,6 @@ private:
 	CountingDlg* m_counting_dlg;
 	ConvertDlg* m_convert_dlg;
 	ColocalizationDlg* m_colocalization_dlg;
-	RecorderDlg* m_recorder_dlg;
 	MeasureDlg* m_measure_dlg;
 	TraceDlg* m_trace_dlg;
 	//prop panel children
@@ -342,6 +357,7 @@ private:
 	void OnFacebook(wxCommandEvent& WXUNUSED(event));
 	void OnTwitter(wxCommandEvent& WXUNUSED(event));
 	void OnShowHideUI(wxCommandEvent& WXUNUSED(event));
+	void OnShowHideToolbar(wxCommandEvent& WXUNUSED(event));
 	void OnShowHideView(wxCommandEvent &event);
 
 	//panes

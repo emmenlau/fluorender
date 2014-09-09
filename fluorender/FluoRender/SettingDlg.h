@@ -27,6 +27,8 @@ class SettingDlg : public wxPanel
 		ID_ShadowDirText,
 		//gradient background
 		ID_GradBgChk,
+		//link rotations
+		ID_RotLinkChk,
 		//override vox
 		ID_OverrideVoxChk,
 		//wavelength to color
@@ -118,6 +120,11 @@ public:
 	//ruler time dependent
 	bool GetRulerTimeDep() {return m_ruler_time_dep;}
 	void SetRulerTimeDep(bool val) {m_ruler_time_dep = val;}
+	//flags for pvxml flipping
+	bool GetPvxmlFlipX() {return m_pvxml_flip_x;}
+	void SetPvxmlFlipX(bool flip) {m_pvxml_flip_x = flip;}
+	bool GetPvxmlFlipY() {return m_pvxml_flip_y;}
+	void SetPvxmlFlipY(bool flip) {m_pvxml_flip_y = flip;}
 
 private:
 	wxWindow* m_frame;
@@ -166,6 +173,9 @@ private:
 	bool m_ruler_use_transf;
 	//ruler time dependent
 	bool m_ruler_time_dep;
+	//flip pvxml frame
+	bool m_pvxml_flip_x;
+	bool m_pvxml_flip_y;
 
 private:
 	//save project
@@ -185,6 +195,9 @@ private:
 	wxTextCtrl *m_shadow_dir_text;
 	//gradient background
 	wxCheckBox *m_grad_bg_chk;
+	//rotations link
+	
+   wxCheckBox *m_rot_link_chk;
 	//override vox
 	wxCheckBox *m_override_vox_chk;
 	//wavelength to color
@@ -247,6 +260,8 @@ private:
 	void OnShadowDirEdit(wxCommandEvent &event);
 	//gradient background
 	void OnGradBgCheck(wxCommandEvent &event);
+	//link rotations
+    void OnRotLink(wxCommandEvent& event);
 	//override vox
 	void OnOverrideVoxCheck(wxCommandEvent &event);
 	//wavelength color

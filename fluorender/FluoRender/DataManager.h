@@ -1,7 +1,7 @@
 #include <GL/glew.h>
 #include "bitmap_fonts.h"
 #include <vector>
-#include <unordered_map>
+#include <boost/unordered_map.hpp>
 #include <string.h>
 #include <tiffio.h>
 #include "FLIVR/BBox.h"
@@ -189,7 +189,7 @@ public:
 	int GetCurTime();
 
 	//draw volume
-	void Draw(bool otho = false, bool intactive = false, double zoom = 1.0, bool intp = true);
+	void Draw(bool otho = false, bool intactive = false, double zoom = 1.0);
 	void DrawBounds();
 	//draw mask (create the mask)
 	//type: 0-initial; 1-diffusion-based growing
@@ -201,7 +201,7 @@ public:
 	//draw label (create the label)
 	//type: 0-initialize; 1-maximum intensity filtering
 	//mode: 0-normal; 1-posterized, 2-copy values
-	void DrawLabel(int type, int mode, double thresh);
+	void DrawLabel(int type, int mode, double thresh, double gm_falloff);
 
 	//calculation
 	void Calculate(int type, VolumeData* vd_a, VolumeData* vd_b);
@@ -325,9 +325,12 @@ public:
 
 	//randomize color
 	void RandomizeColor();
-
+	//legend
 	void SetLegend(bool val);
 	bool GetLegend();
+	//interpolate
+	void SetInterpolate(bool val);
+	bool GetInterpolate();
 
 	//number of valid bricks
 	void SetBrickNum(int num) {m_brick_num = num;}
@@ -430,6 +433,8 @@ private:
 
 	//shown in legend
 	bool m_legend;
+	//interpolate
+	bool m_interpolate;
 
 	//valid brick number
 	int m_brick_num;
@@ -592,7 +597,7 @@ public:
 	string GetTextText(int index);
 	Point GetTextPos(int index);
 	string GetTextInfo(int index);
-	void AddText(string &str, Point &pos, string &info);
+	void AddText(std::string str, Point pos, std::string info);
 	void SetTransform(Transform *tform);
 	void SetVolume(VolumeData* vd);
 	VolumeData* GetVolume();
@@ -614,6 +619,15 @@ public:
 		return m_disp;
 	}
 
+	//font type
+	void SetFont(BitmapFontType font)
+	{
+		m_font = font;
+	}
+	BitmapFontType GetFont()
+	{
+		return m_font;
+	}
 	//memo
 	void SetMemo(string &memo);
 	string &GetMemo();
@@ -647,6 +661,8 @@ private:
 	//atext info meaning
 	wxString m_info_meaning;
 
+	//font type
+	BitmapFontType m_font;
 private:
 	bool InsideClippingPlanes(Point &pos);
 	AText* GetAText(wxString str);
@@ -740,6 +756,15 @@ public:
 	}
 	wxString GetDelInfoValues(wxString del=",");
 
+	//font type
+	void SetFont(BitmapFontType font)
+	{
+		m_font = font;
+	}
+	BitmapFontType GetFont()
+	{
+		return m_font;
+	}
 private:
 	static int m_num;
 	int m_ruler_type;	//0: 2 point; 1: multi point; 2:locator
@@ -755,6 +780,9 @@ private:
 	//extra info
 	wxString m_info_names;
 	wxString m_info_values;
+
+	//font type
+	BitmapFontType m_font;
 };
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -770,6 +798,7 @@ struct Lbl
 {
 	unsigned int id;
 	unsigned int size;
+	Point center;
 };
 
 //a vertex in the map contains a cell and in/out edges
@@ -783,10 +812,11 @@ struct Vertex
 	vector<unsigned int> in_ids;
 
 	int Read(ifstream &ifs);
+	int Write(ofstream &ofs);
 };
 
-typedef unordered_map<unsigned int, Vertex> CellMap;
-typedef unordered_map<unsigned int, Vertex>::iterator CellMapIter;
+typedef boost::unordered_map<unsigned int, Vertex> CellMap;
+typedef boost::unordered_map<unsigned int, Vertex>::iterator CellMapIter;
 
 //a frame contains a cell map
 struct Frame
@@ -794,16 +824,20 @@ struct Frame
 	unsigned int id;
 	CellMap cell_map;
 
+	//reading
 	int Read(ifstream &ifs);
 	int ReadCellMap(ifstream &ifs);
+	//writing
+	int Write(ofstream &ofs);
+	int WriteCellMap(ofstream &ofs);
 };
 
 //frame list
-typedef unordered_map<unsigned int, Frame> FrameList;
-typedef unordered_map<unsigned int, Frame>::iterator FrameIter;
+typedef boost::unordered_map<unsigned int, Frame> FrameList;
+typedef boost::unordered_map<unsigned int, Frame>::iterator FrameIter;
 //id list
-typedef unordered_map<unsigned int, unsigned int> IDMap;
-typedef unordered_map<unsigned int, unsigned int>::iterator IDMapIter;
+typedef boost::unordered_map<unsigned int, Lbl> IDMap;
+typedef boost::unordered_map<unsigned int, Lbl>::iterator IDMapIter;
 
 class TraceGroup : public TreeLayer
 {
@@ -827,20 +861,58 @@ public:
 
 	wxString GetPath() {return m_data_path;}
 	void SetCurTime(int time);
+	int GetCurTime();
 	void SetPrvTime(int time);
+	int GetPrvTime();
 	//ghost num
 	void SetGhostNum(int num) {m_ghost_num = num;}
 	int GetGhostNum() {return m_ghost_num;}
+	//cells size filter
+	void SetCellSize(int size) {m_cell_size = size;}
+	int GetSizeSize() {return m_cell_size;}
 
 	//for selective drawing
 	void ClearIDMap();
-	void AddID(unsigned int id);
-	void SetIDMap(unordered_map<unsigned int, Lbl> &sel_labels);
+	void AddID(Lbl lbl);
+	void SetIDMap(boost::unordered_map<unsigned int, Lbl> &sel_labels);
 	IDMap *GetIDMap();
 	bool FindID(unsigned int id);
+	//in frame list
+	bool FindIDInFrame(unsigned int id, int time, Vertex &vertex);
 
+	//modifications
+	bool LinkVertices(unsigned int id1, int time1,
+					  unsigned int id2, int time2,
+					  bool exclusive=false);
+	bool UnlinkVertices(unsigned int id1, int time1,
+						unsigned int id2, int time2);
+	bool AddVertex(int time, unsigned int id,
+		unsigned int vsize, Point& center);
+	Frame* AddFrame(int time);
+
+	//i/o
 	int Load(wxString &filename);
+	int Save(wxString &filename);
 	void Draw();
+
+	//font type
+	void SetFont(BitmapFontType font)
+	{
+		m_font = font;
+	}
+	BitmapFontType GetFont()
+	{
+		return m_font;
+	}
+
+	//pattern search
+	typedef struct
+	{
+		int div;
+		int conv;
+	} Patterns;
+	//type: 1-diamond; 2-branching
+	bool FindPattern(int type, unsigned int id, int time);
 
 private:
 	static int m_num;
@@ -849,13 +921,18 @@ private:
 	int m_cur_time;
 	int m_prv_time;
 	int m_ghost_num;
+	int m_cell_size;
 
 	FrameList m_frame_list;
 	IDMap m_id_map;
 
+	//font type
+	BitmapFontType m_font;
 private:
-	//reading functions
+	//reading
 	unsigned char ReadTag(ifstream &ifs);
+	//writing
+	void WriteTag(ofstream& ofs, unsigned char tag);
 };
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -960,6 +1037,7 @@ public:
 	void SetShadowParams(double val);
 	void SetMode(int mode);
 	void SetNR(bool val);
+    void SetInterpolate(bool mode);
 	void SetInvert(bool mode);
 
 	//blend mode
@@ -1160,6 +1238,11 @@ public:
 	bool GetOverrideVox()
 	{ return m_override_vox; }
 
+	//flags for pvxml flipping
+	void SetPvxmlFlipX(bool flip) {m_pvxml_flip_x = flip;}
+	bool GetPvxmlFlipX() {return m_pvxml_flip_x;}
+	void SetPvxmlFlipY(bool flip) {m_pvxml_flip_y = flip;}
+	bool GetPvxmlFlipY() {return m_pvxml_flip_y;}
 public:
 	//default values
 	//volume
@@ -1181,6 +1264,7 @@ public:
 	double m_vol_hcm;	//colormap high value
 	bool m_vol_eap;		//enable alpha
 	bool m_vol_esh;		//enable_shading
+	bool m_vol_interp;	//enable interpolation
 	bool m_vol_inv;		//enable inversion
 	bool m_vol_mip;		//enable_mip
 	bool m_vol_nrd;		//noise reduction
@@ -1214,6 +1298,9 @@ private:
 	wxString m_prj_path;
 	//override voxel size
 	bool m_override_vox;
+	//flgs for pvxml flipping
+	bool m_pvxml_flip_x;
+	bool m_pvxml_flip_y;
 };
 
 #endif//_DATAMANAGER_H_

@@ -5,6 +5,24 @@
 #include <wx/utils.h>
 #include <wx/valnum.h>
 #include <algorithm>
+#include "GL/mywgl.h"
+#include "png_resource.h"
+#include "layers.h"
+#include "depth.h"
+#include "axis.h"
+#include "info.h"
+#include "legend.h"
+#include "freefly.h"
+#include "camera.h"
+#include "composite.h"
+#include "refresh.h"
+#include "measure.h"
+#include "ratio.h"
+#include "center.h"
+#include "listicon_save.h"
+#include "scale.h"
+#include "scale_text.h"
+#include "scale_text_off.h"
 
 int VRenderView::m_id = 1;
 ImgShaderFactory VRenderGLView::m_img_shader_factory;
@@ -26,12 +44,15 @@ END_EVENT_TABLE()
 VRenderGLView::VRenderGLView(wxWindow* frame,
       wxWindow* parent,
       wxWindowID id,
+	  //const int* attriblist, //TODO! This is for openGL 3.2 support on OSX!
+      //const int* contextattriblist,
       wxGLContext* sharedContext,
       int * attribList,
       const wxPoint& pos,
       const wxSize& size,
       long style) :
    wxGLCanvas(parent, id, attribList, pos, size, style),
+   //wxGLCanvas(parent, id, attriblist, contextattriblist, pos, size, style),
    //public
    //capture modes
    m_capture(false),
@@ -45,11 +66,12 @@ VRenderGLView::VRenderGLView(wxWindow* frame,
    m_end_frame(0),
    //counters
    m_tseq_cur_num(0),
+   m_tseq_prv_num(0),
    m_bat_cur_num(0),
    m_param_cur_num(0),
    m_total_frames(0),
    //hud
-   m_updating(false),
+   m_updating(true),
    m_draw_annotations(true),
    m_draw_camctr(false),
    m_camctr_size(2.0),
@@ -76,9 +98,9 @@ VRenderGLView::VRenderGLView(wxWindow* frame,
    m_sb_height(0.0),
    //ortho size
    m_ortho_left(0.0),
-   m_ortho_right(0.0),
+   m_ortho_right(1.0),
    m_ortho_bottom(0.0),
-   m_ortho_top(0.0),
+   m_ortho_top(1.0),
    //scale factor
    m_scale_factor(1.0),
    m_scale_factor_saved(1.0),
@@ -259,7 +281,11 @@ VRenderGLView::VRenderGLView(wxWindow* frame,
    m_tseq_backward(false),
    //move clip
    m_clip_up(false),
-   m_clip_down(false)
+   m_clip_down(false),
+   //full cell
+   m_cell_full(false),
+   //link cells
+   m_cell_link(false)
 {
    //create context
    if (sharedContext)
@@ -1201,6 +1227,10 @@ void VRenderGLView::DrawVolumes(int peel)
 
 void VRenderGLView::DrawAnnotations(bool persp)
 {
+	VRenderFrame* vr_frame = (VRenderFrame*)m_frame;
+	BitmapFontType font = BITMAP_FONT_TYPE_HELVETICA_12;
+	if (vr_frame->GetSettingDlg())
+		font = (BitmapFontType)vr_frame->GetSettingDlg()->GetTextFont();
    int i;
    for (i=0; i<(int)m_layer_list.size(); i++)
    {
@@ -1210,6 +1240,8 @@ void VRenderGLView::DrawAnnotations(bool persp)
       {
       case 4://annotation layer
          Annotations* ann = (Annotations*)m_layer_list[i];
+		 if (!ann) continue;
+		 ann->SetFont(font);
          if (ann->GetDisp())
             ann->Draw(persp);
          break;
@@ -1816,7 +1848,8 @@ void VRenderGLView::Label()
 }
 
 //remove noise
-int VRenderGLView::CompAnalysis(double min_voxels, double max_voxels, double thresh, bool select, bool gen_ann)
+int VRenderGLView::CompAnalysis(double min_voxels, double max_voxels,
+	double thresh, double falloff, bool select, bool gen_ann, bool size_map)
 {
    int return_val = 0;
 
@@ -1838,12 +1871,16 @@ int VRenderGLView::CompAnalysis(double min_voxels, double max_voxels, double thr
 
       m_selector.Set2DMask(m_tex_paint);
       m_selector.Set2DWeight(m_tex_final, glIsTexture(m_tex_wt2)?m_tex_wt2:m_tex);
-      return_val = m_selector.CompAnalysis(min_voxels, max_voxels, thresh, select, gen_ann);
+		m_selector.SetSizeMap(size_map);
+		return_val = m_selector.CompAnalysis(min_voxels, max_voxels, thresh, falloff, select, gen_ann);
 
       glPopMatrix();
    }
-   else
-      return_val = m_selector.CompAnalysis(min_voxels, max_voxels, thresh, select, gen_ann);
+	else
+	{
+		m_selector.SetSizeMap(size_map);
+		return_val = m_selector.CompAnalysis(min_voxels, max_voxels, thresh, falloff, select, gen_ann);
+	}
 
    Annotations* ann = m_selector.GetAnnotations();
    if (ann)
@@ -2735,7 +2772,7 @@ void VRenderGLView::DrawOVER(VolumeData* vd, GLuint tex, int peel)
       if (vd->GetVR())
          vd->GetVR()->set_depth_peel(peel);
       vd->SetStreamMode(0);
-      vd->Draw(!m_persp, m_interactive, m_scale_factor, m_intp);
+      vd->Draw(!m_persp, m_interactive, m_scale_factor);
    }
 
    if (vd->GetShadow())
@@ -2794,9 +2831,10 @@ void VRenderGLView::DrawOVER(VolumeData* vd, GLuint tex, int peel)
    glEnable(GL_TEXTURE_2D);
    glBindTexture(GL_TEXTURE_2D, tex);
    //build mipmap
+#ifndef _DARWIN
    glGenerateMipmap(GL_TEXTURE_2D);
    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
-   //
+#endif
    glTexEnvi(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_REPLACE);
    glEnable(GL_BLEND);
    if (m_vol_method == VOL_METHOD_COMP)
@@ -2981,7 +3019,7 @@ void VRenderGLView::DrawMIP(VolumeData* vd, GLuint tex, int peel)
          vd->SetEnableAlpha(false);
       //draw
       vd->SetStreamMode(1);
-      vd->Draw(!m_persp, m_interactive, m_scale_factor, m_intp);
+      vd->Draw(!m_persp, m_interactive, m_scale_factor);
       //
       if (color_mode == 1)
       {
@@ -3113,9 +3151,10 @@ void VRenderGLView::DrawMIP(VolumeData* vd, GLuint tex, int peel)
    glEnable(GL_TEXTURE_2D);
    glBindTexture(GL_TEXTURE_2D, tex);
    //build mipmap
+#ifndef _DARWIN
    glGenerateMipmap(GL_TEXTURE_2D);
    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
-   //
+#endif
    glTexEnvi(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_REPLACE);
    glEnable(GL_BLEND);
    if (m_vol_method == VOL_METHOD_COMP)
@@ -3195,7 +3234,7 @@ void VRenderGLView::DrawOLShading(VolumeData* vd)
    vd->SetMode(2);
    int colormode = vd->GetColormapMode();
    vd->SetStreamMode(2);
-   vd->Draw(!m_persp, m_interactive, m_scale_factor, m_intp);
+   vd->Draw(!m_persp, m_interactive, m_scale_factor);
    vd->RestoreMode();
    vd->SetColormapMode(colormode);
 
@@ -3510,7 +3549,7 @@ void VRenderGLView::DrawOLShadows(vector<VolumeData*> &vlist, GLuint tex)
       vd->Set2dDmap(m_tex_ol1);
       //draw
       vd->SetStreamMode(3);
-      vd->Draw(!m_persp, m_interactive, m_scale_factor, m_intp);
+      vd->Draw(!m_persp, m_interactive, m_scale_factor);
       //restore
       vd->RestoreMode();
       vd->SetColormapMode(colormode);
@@ -3837,9 +3876,10 @@ void VRenderGLView::DrawVolumesMulti(vector<VolumeData*> &list, int peel)
    glEnable(GL_TEXTURE_2D);
    glBindTexture(GL_TEXTURE_2D, use_tex_wt2?m_tex_wt2:m_tex);
    //build mipmap
+#ifndef _DARWIN
    glGenerateMipmap(GL_TEXTURE_2D);
    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
-   //
+#endif
    glTexEnvi(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_REPLACE);
    glEnable(GL_BLEND);
    if (m_vol_method == VOL_METHOD_COMP)
@@ -4378,6 +4418,32 @@ void VRenderGLView::OnIdle(wxIdleEvent& event)
    if (m_clip_down &&
          !wxGetKeyState(wxKeyCode('w')))
       m_clip_down = false;
+	//cell full
+	if (!m_cell_full &&
+		wxGetKeyState(wxKeyCode('f')))
+	{
+		m_cell_full = true;
+		VRenderFrame* vr_frame = (VRenderFrame*)m_frame;
+		if (vr_frame && vr_frame->GetTraceDlg())
+			vr_frame->GetTraceDlg()->CellFull();
+		refresh = true;
+	}
+	if (m_cell_full &&
+		!wxGetKeyState(wxKeyCode('f')))
+		m_cell_full = false;
+	//cell link
+	if (!m_cell_link &&
+		wxGetKeyState(wxKeyCode('l')))
+	{
+		m_cell_link = true;
+		VRenderFrame* vr_frame = (VRenderFrame*)m_frame;
+		if (vr_frame && vr_frame->GetTraceDlg())
+			vr_frame->GetTraceDlg()->CellLink(false);
+		refresh = true;
+	}
+	if (m_cell_link &&
+		!wxGetKeyState(wxKeyCode('l')))
+		m_cell_link = false;
 
    //forced refresh
    if (wxGetKeyState(WXK_F5))
@@ -4491,6 +4557,7 @@ void VRenderGLView::Set4DSeqCapture(wxString &cap_file, int begin_frame, int end
 {
    m_cap_file = cap_file;
    m_tseq_cur_num = begin_frame;
+	m_tseq_prv_num = begin_frame;
    m_begin_frame = begin_frame;
    m_end_frame = end_frame;
    m_capture_tsequ = true;
@@ -5004,6 +5071,7 @@ void VRenderGLView::PreDraw()
             if (m_4d_rewind && !m_run_script)
             {
                m_tseq_cur_num = m_begin_frame;
+			   m_tseq_prv_num = m_begin_frame;
             }
             else
             {
@@ -5013,7 +5081,11 @@ void VRenderGLView::PreDraw()
             }
          }
          else
-            m_tseq_cur_num++;
+
+			{
+				m_tseq_prv_num = m_tseq_cur_num;
+				m_tseq_cur_num++;
+			}
 
          if (!m_capture && !m_run_script)
          {
@@ -5397,7 +5469,7 @@ void VRenderGLView::Run4DScript(wxString scriptname)
                      wxMkdir(str);
                } while (true);
 
-               CompAnalysis(0.0, size, thresh, false, false);
+			   CompAnalysis(0.0, size, thresh, 1.0, false, false, false);
                Calculate(6, "", false);
                VolumeData* vd = m_calculator.GetResult();
                if (vd)
@@ -5438,8 +5510,8 @@ void VRenderGLView::Run4DScript(wxString scriptname)
                if (!mask_data) break;
                unsigned int* label_data = (unsigned int*)(label_nrrd->data);
                if (!label_data) break;
-               unordered_map <unsigned int, Lbl>sel_labels;
-               unordered_map <unsigned int, Lbl>::iterator label_iter;
+			   boost::unordered_map <unsigned int, Lbl>sel_labels;
+               boost::unordered_map <unsigned int, Lbl>::iterator label_iter;
                for (ii=0; ii<nx; ii++)
                   for (jj=0; jj<ny; jj++)
                      for (kk=0; kk<nz; kk++)
@@ -5460,6 +5532,22 @@ void VRenderGLView::Run4DScript(wxString scriptname)
                               label_iter->second.size++;
                         }
                      }
+				 //clean label list according to the size limit
+				 label_iter = sel_labels.begin();
+				 while (label_iter != sel_labels.end())
+				 {
+					if (label_iter->second.size < (unsigned int)slimit)
+			 			label_iter = sel_labels.erase(label_iter);
+			 		else
+			 			++label_iter;
+				 }
+				 if (m_trace_group)
+				 {
+				 	//create new id list
+				 	m_trace_group->SetCurTime(m_tseq_cur_num);
+				 	m_trace_group->SetPrvTime(m_tseq_prv_num);
+				 	m_trace_group->SetIDMap(sel_labels);
+				 }
                //load and replace the label
                BaseReader* reader = m_cur_vol->GetReader();
                if (!reader) break;
@@ -5481,21 +5569,18 @@ void VRenderGLView::Run4DScript(wxString scriptname)
                      {
                         int index = nx*ny*kk + nx*jj + ii;
                         unsigned int label_value = label_data[index];
-                        label_iter = sel_labels.find(label_value);
-                        if (label_iter != sel_labels.end() &&
-                              label_iter->second.size >= (unsigned int)slimit)
-                           mask_data[index] = 255;
-                     }
-
-               //process trace data
-               if (m_trace_group)
-               {
-                  m_trace_group->SetCurTime(m_tseq_cur_num);
-                  unordered_map <unsigned int, Lbl>::iterator id_iter;
-                  for (id_iter=sel_labels.begin(); id_iter!=sel_labels.end(); id_iter++)
-                     if (id_iter->second.size >= (unsigned int)slimit)
-                        m_trace_group->AddID(id_iter->second.id);
-               }
+						if (m_trace_group)
+						{
+							if (m_trace_group->FindID(label_value))
+								mask_data[index] = 255;
+						}
+						else
+						{
+							label_iter = sel_labels.find(label_value);
+							if (label_iter != sel_labels.end())
+								mask_data[index] = 255;
+						}
+					}
 
                //add traces to trace dialog
                VRenderFrame* vr_frame = (VRenderFrame*)m_frame;
@@ -5789,7 +5874,7 @@ void VRenderGLView::SetPersp(bool persp)
       wxString str = wxString::Format("%.0f", m_scale_factor*100.0);
       m_vrv->m_scale_factor_sldr->SetValue(m_scale_factor*100);
       m_vrv->m_scale_factor_text->ChangeValue(str);
-      m_vrv->m_free_chk->SetValue(false);
+      m_vrv->m_options_toolbar->ToggleTool(VRenderView::ID_FreeChk,false);
 
       SetRotations(m_rotx, m_roty, m_rotz);
    }
@@ -5799,8 +5884,8 @@ void VRenderGLView::SetPersp(bool persp)
 void VRenderGLView::SetFree(bool free)
 {
    m_free = free;
-   if (m_vrv->m_free_chk->GetValue() != m_free)
-      m_vrv->m_free_chk->SetValue(m_free);
+   if (m_vrv->m_options_toolbar->GetToolState(VRenderView::ID_FreeChk) != m_free)
+      m_vrv->m_options_toolbar->ToggleTool(VRenderView::ID_FreeChk,m_free);
    if (free)
    {
       m_persp = true;
@@ -5884,19 +5969,19 @@ void VRenderGLView::SetVolMethod(int method)
    m_vol_method = method;
 
    //ui
-   m_vrv->m_volume_seq_rd->SetValue(false);
-   m_vrv->m_volume_multi_rd->SetValue(false);
-   m_vrv->m_volume_comp_rd->SetValue(false);
+   m_vrv->m_options_toolbar->ToggleTool(VRenderView::ID_VolumeSeqRd,false);
+   m_vrv->m_options_toolbar->ToggleTool(VRenderView::ID_VolumeMultiRd,false);
+   m_vrv->m_options_toolbar->ToggleTool(VRenderView::ID_VolumeCompRd,false);
    switch (m_vol_method)
    {
    case VOL_METHOD_SEQ:
-      m_vrv->m_volume_seq_rd->SetValue(true);
+	  m_vrv->m_options_toolbar->ToggleTool(VRenderView::ID_VolumeSeqRd,true);
       break;
    case VOL_METHOD_MULTI:
-      m_vrv->m_volume_multi_rd->SetValue(true);
+	  m_vrv->m_options_toolbar->ToggleTool(VRenderView::ID_VolumeMultiRd,true);
       break;
    case VOL_METHOD_COMP:
-      m_vrv->m_volume_comp_rd->SetValue(true);
+	  m_vrv->m_options_toolbar->ToggleTool(VRenderView::ID_VolumeCompRd,true);
       break;
    }
 }
@@ -6229,7 +6314,6 @@ void VRenderGLView::RemoveVolumeData(wxString &name)
             {
                m_layer_list.erase(m_layer_list.begin()+i);
                m_vd_pop_dirty = true;
-                m_cur_vol = NULL;
                return;
             }
          }
@@ -6244,7 +6328,6 @@ void VRenderGLView::RemoveVolumeData(wxString &name)
                {
                   group->RemoveVolumeData(j);
                    m_vd_pop_dirty = true;
-                   m_cur_vol = NULL;
                   return;
                }
             }
@@ -7278,7 +7361,7 @@ void VRenderGLView::DrawClippingPlanes(bool border, int face_winding)
       //y2 = (p4, p5, p7, p6)
       if (m_clip_mask & 8)
       {
-         glColor4d(0.5, 1.0, 1.0, plane_trans);
+         glColor4d(1.0, 1.0, 0.5, plane_trans);
          glBegin(GL_QUADS);
          glVertex3f(p4.x(), p4.y(), p4.z());
          glVertex3f(p5.x(), p5.y(), p5.z());
@@ -7320,7 +7403,7 @@ void VRenderGLView::DrawClippingPlanes(bool border, int face_winding)
       //z2 = (p5, p1, p3, p7)
       if (m_clip_mask & 32)
       {
-         glColor4d(1.0, 1.0, 0.5, plane_trans);
+         glColor4d(0.5, 1.0, 1.0, plane_trans);
          glBegin(GL_QUADS);
          glVertex3f(p5.x(), p5.y(), p5.z());
          glVertex3f(p1.x(), p1.y(), p1.z());
@@ -8530,6 +8613,7 @@ void VRenderGLView::HaltLoopUpdate()
 //new function to refresh
 void VRenderGLView::RefreshGL(bool erase, bool start_loop)
 {
+   m_updating = true;
    if (start_loop)
       StartLoopUpdate();
    SetSortBricks();
@@ -9095,10 +9179,15 @@ void VRenderGLView::DrawRulers()
    if (nx <= 0 || ny <= 0)
       return;
 
+	VRenderFrame* vr_frame = (VRenderFrame*)m_frame;
+	BitmapFontType font = BITMAP_FONT_TYPE_HELVETICA_12;
+	if (vr_frame->GetSettingDlg())
+		font = (BitmapFontType)vr_frame->GetSettingDlg()->GetTextFont();
    for (int i=0; i<(int)m_ruler_list.size(); i++)
    {
       Ruler* ruler = m_ruler_list[i];
       if (!ruler) continue;
+		ruler->SetFont(font);
       if (!ruler->GetTimeDep() ||
             (ruler->GetTimeDep() &&
              ruler->GetTime() == m_tseq_cur_num))
@@ -9132,6 +9221,13 @@ int VRenderGLView::LoadTraceGroup(wxString filename)
    return m_trace_group->Load(filename);
 }
 
+int VRenderGLView::SaveTraceGroup(wxString filename)
+{
+	if (m_trace_group)
+		return m_trace_group->Save(filename);
+	else
+		return 0;
+}
 void VRenderGLView::ExportTrace(wxString filename, unsigned int id)
 {
    if (!m_trace_group)
@@ -9140,9 +9236,31 @@ void VRenderGLView::ExportTrace(wxString filename, unsigned int id)
 
 void VRenderGLView::DrawTraces()
 {
-   if (!m_trace_group)
-      return;
-   m_trace_group->Draw();
+	if (!m_trace_group)
+		return;
+	
+	VRenderFrame* vr_frame = (VRenderFrame*)m_frame;
+	BitmapFontType font = BITMAP_FONT_TYPE_HELVETICA_12;
+	if (vr_frame->GetSettingDlg())
+	{
+		font = (BitmapFontType)vr_frame->GetSettingDlg()->GetTextFont();
+		m_trace_group->SetFont(font);
+	}
+
+	//get correct scale
+	glMatrixMode(GL_MODELVIEW_MATRIX);
+	glPushMatrix();
+	if (m_cur_vol)
+	{
+		double spcx, spcy, spcz;
+		m_cur_vol->GetSpacings(spcx, spcy, spcz);
+		glScaled(spcx, spcy, spcz);
+	}
+
+	m_trace_group->Draw();
+
+	glMatrixMode(GL_MODELVIEW_MATRIX);
+	glPopMatrix();
 }
 
 void VRenderGLView::GetTraces()
@@ -9167,8 +9285,8 @@ void VRenderGLView::GetTraces()
 	if (!mask_data) return;
 	unsigned int* label_data = (unsigned int*)(label_nrrd->data);
 	if (!label_data) return;
-	unordered_map<unsigned int, Lbl> sel_labels;
-	unordered_map<unsigned int, Lbl>::iterator label_iter;
+	boost::unordered_map<unsigned int, Lbl> sel_labels;
+	boost::unordered_map<unsigned int, Lbl>::iterator label_iter;
 	for (ii=0; ii<nx; ii++)
 	for (jj=0; jj<ny; jj++)
 	for (kk=0; kk<nz; kk++)
@@ -9183,11 +9301,21 @@ void VRenderGLView::GetTraces()
 				Lbl lbl;
 				lbl.id = label_value;
 				lbl.size = 1;
+				lbl.center = Point(ii, jj, kk);
 				sel_labels.insert(pair<unsigned int, Lbl>(label_value, lbl));
 			}
 			else
+			{
 				label_iter->second.size++;
+				label_iter->second.center += Point(ii, jj, kk);
+			}
 		}
+	}
+	//calculate center
+	for (label_iter=sel_labels.begin(); label_iter!=sel_labels.end(); ++label_iter)
+	{
+		if (label_iter->second.size > 0)
+			label_iter->second.center /= label_iter->second.size;
 	}
 
 	//create id list
@@ -9445,25 +9573,13 @@ void VRenderGLView::OnMouse(wxMouseEvent& event)
 
                wxString str = wxString::Format("%.1f", m_rotx);
                m_vrv->m_x_rot_text->ChangeValue(str);
-               if (m_rot_lock)
-                  m_vrv->m_x_rot_sldr->SetValue(int(m_rotx/45.0));
-               else
-                  m_vrv->m_x_rot_sldr->SetValue(int(m_rotx));
                str = wxString::Format("%.1f", m_roty);
                m_vrv->m_y_rot_text->ChangeValue(str);
-               if (m_rot_lock)
-                  m_vrv->m_y_rot_sldr->SetValue(int(m_roty/45.0));
-               else
-                  m_vrv->m_y_rot_sldr->SetValue(int(m_roty));
                str = wxString::Format("%.1f", m_rotz);
                m_vrv->m_z_rot_text->ChangeValue(str);
-               if (m_rot_lock)
-                  m_vrv->m_z_rot_sldr->SetValue(int(m_rotz/45.0));
-               else
-                  m_vrv->m_z_rot_sldr->SetValue(int(m_rotz));
 
                m_interactive = m_adaptive;
-
+			   
                if (m_linked_rot)
                {
                   VRenderFrame* vr_frame = (VRenderFrame*)m_frame;
@@ -9472,12 +9588,12 @@ void VRenderGLView::OnMouse(wxMouseEvent& event)
                      for (int i=0; i<vr_frame->GetViewNum(); i++)
                      {
                         VRenderView* view = vr_frame->GetView(i);
-                        if (view && view->m_glview &&
-                              view->m_glview!=this &&
-                              view->m_glview->m_linked_rot)
+                        if (view && view->m_glview)
                         {
-                           view->m_glview->SetRotations(m_rotx, m_roty, m_rotz, true, false);
-                           view->RefreshGL();
+                           view->m_glview->SetRotations(
+							   m_rotx, m_roty, m_rotz, true, false);
+							wxPaintEvent evt;
+						   view->m_glview->OnDraw(evt);
                         }
                      }
                   }
@@ -9754,19 +9870,16 @@ void VRenderGLView::SetRotations(double rotx, double roty, double rotz, bool ui_
    Quaternion up(0.0, 1.0, 0.0, 0.0);
    Quaternion up2 = (-m_q) * up * m_q;
    m_up = Vector(up2.x, up2.y, up2.z);
-
-   if (m_rot_lock)
-   {
-      m_vrv->m_x_rot_sldr->SetValue(int(m_rotx/45.0));
-      m_vrv->m_y_rot_sldr->SetValue(int(m_roty/45.0));
-      m_vrv->m_z_rot_sldr->SetValue(int(m_rotz/45.0));
-   }
-   else
-   {
-      m_vrv->m_x_rot_sldr->SetValue(int(m_rotx));
-      m_vrv->m_y_rot_sldr->SetValue(int(m_roty));
-      m_vrv->m_z_rot_sldr->SetValue(int(m_rotz));
-   }
+   
+   //double dval = m_rot_lock?(((int)(m_rotx/45.0))*45):m_rotx;
+   //wxString str = wxString::Format("%.1f", dval);
+   //m_vrv->m_x_rot_text->SetValue(str);
+   //dval = m_rot_lock?(((int)(m_roty/45.0))*45):m_roty;
+   //str = wxString::Format("%.1f", dval);
+   //m_vrv->m_y_rot_text->SetValue(str);
+   //dval = m_rot_lock?(((int)(m_rotz/45.0))*45):m_rotz;
+   //str = wxString::Format("%.1f", dval);
+   //m_vrv->m_z_rot_text->SetValue(str);
 
    if (ui_update)
    {
@@ -9826,50 +9939,48 @@ void VRenderGLView::GetFrame(int &x, int &y, int &w, int &h)
 
 BEGIN_EVENT_TABLE(VRenderView, wxPanel)
 //bar top
-EVT_RADIOBUTTON(ID_VolumeSeqRd, VRenderView::OnVolumeMethodCheck)
-EVT_RADIOBUTTON(ID_VolumeMultiRd, VRenderView::OnVolumeMethodCheck)
-EVT_RADIOBUTTON(ID_VolumeCompRd, VRenderView::OnVolumeMethodCheck)
+EVT_TOOL(ID_VolumeSeqRd, VRenderView::OnVolumeMethodCheck)
+EVT_TOOL(ID_VolumeMultiRd, VRenderView::OnVolumeMethodCheck)
+EVT_TOOL(ID_VolumeCompRd, VRenderView::OnVolumeMethodCheck)
 EVT_BUTTON(ID_CaptureBtn, VRenderView::OnCapture)
 EVT_COLOURPICKER_CHANGED(ID_BgColorPicker, VRenderView::OnBgColorChange)
-EVT_CHECKBOX(ID_CamCtrChk, VRenderView::OnCamCtrCheck)
-EVT_CHECKBOX(ID_FpsChk, VRenderView::OnFpsCheck)
-EVT_CHECKBOX(ID_LegendChk, VRenderView::OnLegendCheck)
-EVT_CHECKBOX(ID_IntpChk, VRenderView::OnIntpCheck)
+EVT_TOOL(ID_CamCtrChk, VRenderView::OnCamCtrCheck)
+EVT_TOOL(ID_FpsChk, VRenderView::OnFpsCheck)
+EVT_TOOL(ID_LegendChk, VRenderView::OnLegendCheck)
+//scale bar
+EVT_TOOL(ID_ScaleBar, VRenderView::OnScaleBar)
+EVT_TEXT(ID_ScaleText, VRenderView::OnScaleTextEditing)
+EVT_COMBOBOX(ID_ScaleCmb, VRenderView::OnScaleTextEditing)
+//other tools
 EVT_COMMAND_SCROLL(ID_AovSldr, VRenderView::OnAovChange)
 EVT_TEXT(ID_AovText, VRenderView::OnAovText)
-EVT_CHECKBOX(ID_FreeChk, VRenderView::OnFreeChk)
+EVT_TOOL(ID_FreeChk, VRenderView::OnFreeChk)
 //bar left
-EVT_CHECKBOX(ID_DepthAttenChk, VRenderView::OnDepthAttenCheck)
+EVT_TOOL(ID_DepthAttenChk, VRenderView::OnDepthAttenCheck)
 EVT_COMMAND_SCROLL(ID_DepthAttenFactorSldr, VRenderView::OnDepthAttenFactorChange)
 EVT_TEXT(ID_DepthAttenFactorText, VRenderView::OnDepthAttenFactorEdit)
-EVT_BUTTON(ID_DepthAttenResetBtn, VRenderView::OnDepthAttenReset)
+EVT_TOOL(ID_DepthAttenResetBtn, VRenderView::OnDepthAttenReset)
 //bar right
-EVT_BUTTON(ID_CenterBtn, VRenderView::OnCenter)
-EVT_BUTTON(ID_Scale121Btn, VRenderView::OnScale121)
+EVT_TOOL(ID_CenterBtn, VRenderView::OnCenter)
+EVT_TOOL(ID_Scale121Btn, VRenderView::OnScale121)
 EVT_COMMAND_SCROLL(ID_ScaleFactorSldr, VRenderView::OnScaleFactorChange)
 EVT_TEXT(ID_ScaleFactorText, VRenderView::OnScaleFactorEdit)
-EVT_BUTTON(ID_ScaleResetBtn, VRenderView::OnScaleReset)
+EVT_TOOL(ID_ScaleResetBtn, VRenderView::OnScaleReset)
 EVT_SPIN_UP(ID_ScaleFactorSpin, VRenderView::OnScaleFactorSpinDown)
 EVT_SPIN_DOWN(ID_ScaleFactorSpin, VRenderView::OnScaleFactorSpinUp)
 //bar bottom
-EVT_CHECKBOX(ID_RotLinkChk, VRenderView::OnRotLink)
-EVT_BUTTON(ID_RotResetBtn, VRenderView::OnRotReset)
+EVT_TOOL(ID_RotResetBtn, VRenderView::OnRotReset)
 EVT_TEXT(ID_XRotText, VRenderView::OnValueEdit)
 EVT_TEXT(ID_YRotText, VRenderView::OnValueEdit)
 EVT_TEXT(ID_ZRotText, VRenderView::OnValueEdit)
 EVT_COMMAND_SCROLL(ID_XRotSldr, VRenderView::OnXRotScroll)
 EVT_COMMAND_SCROLL(ID_YRotSldr, VRenderView::OnYRotScroll)
 EVT_COMMAND_SCROLL(ID_ZRotSldr, VRenderView::OnZRotScroll)
-EVT_CHECKBOX(ID_RotLockChk, VRenderView::OnRotLockCheck)
-//spin buttons
-EVT_SPIN_UP(ID_XRotSpin, VRenderView::OnXRotSpinUp)
-EVT_SPIN_DOWN(ID_XRotSpin, VRenderView::OnXRotSpinDown)
-EVT_SPIN_UP(ID_YRotSpin, VRenderView::OnYRotSpinUp)
-EVT_SPIN_DOWN(ID_YRotSpin, VRenderView::OnYRotSpinDown)
-EVT_SPIN_UP(ID_ZRotSpin, VRenderView::OnZRotSpinUp)
-EVT_SPIN_DOWN(ID_ZRotSpin, VRenderView::OnZRotSpinDown)
+EVT_TOOL(ID_RotLockChk, VRenderView::OnRotLockCheck)
+//timer
+EVT_TIMER(ID_RotateTimer, VRenderView::OnTimer)
 //reset
-EVT_BUTTON(ID_DefaultBtn, VRenderView::OnSaveDefault)
+EVT_TOOL(ID_DefaultBtn, VRenderView::OnSaveDefault)
 
 EVT_KEY_DOWN(VRenderView::OnKeyDown)
 END_EVENT_TABLE()
@@ -9884,17 +9995,44 @@ VRenderView::VRenderView(wxWindow* frame,
    wxPanel(parent, id, pos, size, style),
    m_frame(frame),
    m_draw_clip(false),
-   m_use_dft_settings(false)
+   m_use_dft_settings(false),
+   m_draw_scalebar(kOff),
+   m_timer(this,ID_RotateTimer)
 {
    wxString name = wxString::Format("Render View:%d", m_id++);
    this->SetName(name);
 
    //render view/////////////////////////////////////////////////
    m_glview = new VRenderGLView(frame, this, wxID_ANY, sharedContext);
-   m_glview->SetCanFocus(false);
+	//int attriblist[] = {WX_GL_MIN_RED, 8, //TODO!!! This is where the call to the altered wxWidget context attribute list happens
+	//					WX_GL_MIN_GREEN, 8,
+	//					WX_GL_MIN_BLUE, 8,
+	//					WX_GL_MIN_ALPHA, 8,
+	//					0};
+	//int contextattriblist[] = {	WGL_CONTEXT_MAJOR_VERSION_ARB, 3,
+	//							WGL_CONTEXT_MINOR_VERSION_ARB, 0,
+	//							//WGL_CONTEXT_PROFILE_MASK_ARB, WGL_CONTEXT_ES_PROFILE_BIT_EXT,
+	//							//WGL_DRAW_TO_WINDOW_ARB, 1,
+	//							//WGL_ACCELERATION_ARB, WGL_FULL_ACCELERATION_ARB,
+	//							//WGL_RED_BITS_ARB, 10,
+	//							//WGL_GREEN_BITS_ARB, 10,
+	//							//WGL_BLUE_BITS_ARB, 10,
+	//							//WGL_ALPHA_BITS_ARB, 2,
+	//							//WGL_DOUBLE_BUFFER_ARB, 1,
+	//							0};
 
+	//m_glview = new VRenderGLView(frame, this, wxID_ANY, NULL, NULL, sharedContext);
+   m_glview->SetCanFocus(false);
    CreateBar();
+   if (m_glview) {
+	   m_glview->SetSBText(wxString::Format("50 %c%c", 131, 'm'));
+	   m_glview->m_sb_num = "50";
+	   m_glview->m_sb_unit = 0;
+	   m_glview->SetScaleBarLen(1.);
+   }
    LoadSettings();
+   m_x_rotating = m_y_rotating = m_z_rotating = false;
+   m_timer.Start(50);
 }
 
 VRenderView::~VRenderView()
@@ -9920,128 +10058,221 @@ void VRenderView::CreateBar()
    wxStaticText *st1, *st2, *st3;
 
    //bar top///////////////////////////////////////////////////
+   //toolbar 1
+   m_options_toolbar = new wxToolBar(this,wxID_ANY);
    wxBoxSizer* sizer_h_1 = new wxBoxSizer(wxHORIZONTAL);
-   m_volume_seq_rd = new wxRadioButton(this, ID_VolumeSeqRd, "Layered",
-         wxDefaultPosition, wxDefaultSize, wxRB_GROUP);
-   m_volume_multi_rd = new wxRadioButton(this, ID_VolumeMultiRd, "Depth",
-         wxDefaultPosition, wxDefaultSize);
-   m_volume_comp_rd = new wxRadioButton(this, ID_VolumeCompRd, "Composite",
-         wxDefaultPosition, wxDefaultSize);
-   m_volume_seq_rd->SetValue(false);
-   m_volume_multi_rd->SetValue(false);
-   m_volume_comp_rd->SetValue(false);
+#ifndef _DARWIN
+   //the spacer
+   wxStaticText * stb;
+#endif
+   //add the options
+   m_options_toolbar->AddRadioTool(ID_VolumeSeqRd,"Layered",
+	   wxGetBitmapFromMemory(layers),wxNullBitmap,"Render View as Layers",
+	   "Render View as Layers");
+   m_options_toolbar->AddRadioTool(ID_VolumeMultiRd,"Depth",
+	   wxGetBitmapFromMemory(depth),wxNullBitmap,"Render View by Depth",
+	   "Render View by Depth");
+   m_options_toolbar->AddRadioTool(ID_VolumeCompRd,"Composite",
+	   wxGetBitmapFromMemory(composite),wxNullBitmap,
+	   "Render View as a Composite of Colors",
+	   "Render View as a Composite of Colors");
+
+   m_options_toolbar->ToggleTool(ID_VolumeSeqRd,false);
+   m_options_toolbar->ToggleTool(ID_VolumeMultiRd,false);
+   m_options_toolbar->ToggleTool(ID_VolumeCompRd,false);
+	m_options_toolbar->AddSeparator();
+#ifndef _DARWIN
+	stb = new wxStaticText(m_options_toolbar, wxID_ANY, "",
+						   wxDefaultPosition, wxSize(5,5));
+	stb->SetBackgroundColour(wxColour(128,128,128));
+	m_options_toolbar->AddControl(stb);
+	m_options_toolbar->AddSeparator();
+#endif
    switch (m_glview->GetVolMethod())
    {
    case VOL_METHOD_SEQ:
-      m_volume_seq_rd->SetValue(true);
+   m_options_toolbar->ToggleTool(ID_VolumeSeqRd,true);
       break;
    case VOL_METHOD_MULTI:
-      m_volume_multi_rd->SetValue(true);
+   m_options_toolbar->ToggleTool(ID_VolumeMultiRd,true);
       break;
    case VOL_METHOD_COMP:
-      m_volume_comp_rd->SetValue(true);
+   m_options_toolbar->ToggleTool(ID_VolumeCompRd,true);
       break;
-   }
-   m_capture_btn = new wxButton(this, ID_CaptureBtn, "Capture",
-         wxDefaultPosition, wxSize(80, 20));
-   st1 = new wxStaticText(this, 0, "Background:");
-   m_bg_color_picker = new wxColourPickerCtrl(this, ID_BgColorPicker, *wxBLACK,
-         wxDefaultPosition, wxDefaultSize/*wxSize(40, 20)*/);
-   m_cam_ctr_chk = new wxCheckBox(this, ID_CamCtrChk, "Center",
-         wxDefaultPosition, wxSize(-1, 20));
-   m_cam_ctr_chk->SetValue(false);
-   m_fps_chk = new wxCheckBox(this, ID_FpsChk, "Info.",
-         wxDefaultPosition, wxSize(-1, 20));
-   m_fps_chk->SetValue(false);
-   m_legend_chk = new wxCheckBox(this, ID_LegendChk, "Legend",
-         wxDefaultPosition, wxSize(-1, 20));
-   m_legend_chk->SetValue(false);
-   m_intp_chk = new wxCheckBox(this, ID_IntpChk, "Intrp.",
-         wxDefaultPosition, wxSize(-1, 20));
-   m_intp_chk->SetValue(true);
+   }   
+   //camera
+   wxButton * cam = new wxButton(m_options_toolbar, ID_CaptureBtn, "Capture");
+   cam->SetBitmap(wxGetBitmapFromMemory(camera));
+   m_options_toolbar->AddControl(cam);
+	m_options_toolbar->AddSeparator();
+#ifndef _DARWIN
+	stb = new wxStaticText(m_options_toolbar, wxID_ANY, "",
+						   wxDefaultPosition, wxSize(5,5));
+	stb->SetBackgroundColour(wxColour(128,128,128));
+	m_options_toolbar->AddControl(stb);
+	m_options_toolbar->AddSeparator();
+#endif
+   
+   m_options_toolbar->AddCheckTool(ID_CamCtrChk,"Axis",
+	   wxGetBitmapFromMemory(axis),wxNullBitmap,
+	   "Toggle View of the Center Axis",
+	   "Toggle View of the Center Axis");
+   m_options_toolbar->ToggleTool(ID_CamCtrChk,false);
+
+   m_options_toolbar->AddCheckTool(ID_FpsChk,"Info",
+	   wxGetBitmapFromMemory(info),wxNullBitmap,
+	   "Toggle View of FPS and Mouse Position",
+	   "Toggle View of FPS and Mouse Position");
+   m_options_toolbar->ToggleTool(ID_FpsChk,false);
+   
+   m_options_toolbar->AddCheckTool(ID_LegendChk,"Legend",
+	   wxGetBitmapFromMemory(legend),wxNullBitmap,
+	   "Toggle View of the Legend",
+	   "Toggle View of the Legend");
+   m_options_toolbar->ToggleTool(ID_LegendChk,false);
+	m_options_toolbar->AddSeparator();
+#ifndef _DARWIN
+	stb = new wxStaticText(m_options_toolbar, wxID_ANY, "",
+						   wxDefaultPosition, wxSize(5,5));
+	stb->SetBackgroundColour(wxColour(128,128,128));
+	m_options_toolbar->AddControl(stb);
+	m_options_toolbar->AddSeparator();
+#endif
+   
+   //scale bar
+   m_options_toolbar->AddTool(ID_ScaleBar,"Scale Bar",
+	   wxGetBitmapFromMemory(scale_text_off),
+	   "Toggle Scalebar Options (Off, On, On with text)");
+   m_scale_text = new wxTextCtrl(m_options_toolbar, ID_ScaleText, "50",
+         wxDefaultPosition, wxSize(35, 20), 0, vald_int);
+   m_scale_text->Disable();
+   m_scale_cmb = new wxComboBox(m_options_toolbar, ID_ScaleCmb, "",
+         wxDefaultPosition, wxSize(50, 30), 0, NULL, wxCB_READONLY);
+   m_scale_cmb->Append("nm");
+   m_scale_cmb->Append(L"\u03BCm");
+   m_scale_cmb->Append("mm");
+   m_scale_cmb->Select(1);
+   m_scale_cmb->Disable();
+
+   m_options_toolbar->AddControl(m_scale_text);
+   m_options_toolbar->AddControl(m_scale_cmb);
+
+   //m_options_toolbar->Realize();
+	m_options_toolbar->AddStretchableSpace();
    //angle of view
-   st2 = new wxStaticText(this, 0, "V. AOV:");
-   m_aov_sldr = new wxSlider(this, ID_AovSldr, 45, 10, 100,
-         wxDefaultPosition, wxSize(120, 20), wxSL_HORIZONTAL);
+   //m_options_toolbar2 = new wxToolBar(this, wxID_ANY);
+   st2 = new wxStaticText(m_options_toolbar, wxID_ANY, "Perspective Angle:");
+   m_aov_sldr = new wxSlider(m_options_toolbar, ID_AovSldr, 45, 10, 100,
+         wxDefaultPosition, wxSize(200, 20), wxSL_HORIZONTAL);
    m_aov_sldr->SetValue(GetPersp()?GetAov():10);
    m_aov_sldr->Connect(wxID_ANY, wxEVT_IDLE,
          wxIdleEventHandler(VRenderView::OnAovSldrIdle),
          NULL, this);
-   m_aov_text = new wxTextCtrl(this, ID_AovText, "",
+   m_aov_text = new wxTextCtrl(m_options_toolbar, ID_AovText, "",
          wxDefaultPosition, wxSize(60, 20), 0, vald_int);
-   m_aov_text->ChangeValue(GetPersp()?wxString::Format("%d", int(GetAov())):"Ortho");
-   m_free_chk = new wxCheckBox(this, ID_FreeChk, "FreeFly",
-         wxDefaultPosition, wxSize(-1, 20));
+   m_aov_text->ChangeValue(GetPersp()?wxString::Format("%d", 
+	   int(GetAov())):"Ortho");
+   m_options_toolbar->AddControl(st2);
+   m_options_toolbar->AddControl(m_aov_sldr);
+   m_options_toolbar->AddControl(m_aov_text);
+   st2 = new wxStaticText(m_options_toolbar, wxID_ANY, "    Free-Fly:  ");
+   m_options_toolbar->AddControl(st2);
+
+   m_options_toolbar->AddCheckTool(ID_FreeChk,"Free Fly",
+	   wxGetBitmapFromMemory(freefly),wxNullBitmap,
+	   "Change the camera to a 'Free-Fly' Mode",
+	   "Change the camera to a 'Free-Fly' Mode");
+
    if (GetFree())
-      m_free_chk->SetValue(true);
+	m_options_toolbar->ToggleTool(ID_FreeChk,true);
    else
-      m_free_chk->SetValue(false);
-   //
-   sizer_h_1->Add(10, 5, 0);
-   sizer_h_1->Add(m_volume_seq_rd, 0, wxALIGN_CENTER, 0);
-   sizer_h_1->Add(m_volume_multi_rd, 0, wxALIGN_CENTER, 0);
-   sizer_h_1->Add(m_volume_comp_rd, 0, wxALIGN_CENTER, 0);
-   sizer_h_1->Add(10, 5, 0);
-   sizer_h_1->Add(m_capture_btn, 0, wxALIGN_CENTER, 0);
-   sizer_h_1->Add(10, 5, 0);
-   sizer_h_1->Add(st1, 0, wxALIGN_CENTER, 0);
-   sizer_h_1->Add(m_bg_color_picker, 0, wxALIGN_CENTER, 0);
-   sizer_h_1->Add(10, 5, 0);
-   sizer_h_1->Add(m_cam_ctr_chk, 0, wxALIGN_CENTER);
-   sizer_h_1->Add(5, 5, 0);
-   sizer_h_1->Add(m_fps_chk, 0, wxALIGN_CENTER);
-   sizer_h_1->Add(5, 5, 0);
-   sizer_h_1->Add(m_legend_chk, 0, wxALIGN_CENTER);
-   sizer_h_1->Add(5, 5, 0);
-   sizer_h_1->Add(m_intp_chk, 0, wxALIGN_CENTER);
-   sizer_h_1->Add(5, 5, 0);
-   sizer_h_1->Add(st2, 0, wxALIGN_CENTER, 0);
-   sizer_h_1->Add(m_aov_sldr, 0, wxALIGN_CENTER);
-   sizer_h_1->Add(m_aov_text, 0, wxALIGN_CENTER);
-   sizer_h_1->Add(5, 5, 0);
-   sizer_h_1->Add(m_free_chk, 0, wxALIGN_CENTER);
+	   m_options_toolbar->ToggleTool(ID_FreeChk,false);
+	m_options_toolbar->AddSeparator();
+#ifndef _DARWIN
+	stb = new wxStaticText(m_options_toolbar, wxID_ANY, "",
+						   wxDefaultPosition, wxSize(5,5));
+	stb->SetBackgroundColour(wxColour(128,128,128));
+	m_options_toolbar->AddControl(stb);
+	m_options_toolbar->AddSeparator();
+#endif
+   //background option
+   st1 = new wxStaticText(m_options_toolbar, wxID_ANY, "Background:  ");
+   m_bg_color_picker = new wxColourPickerCtrl(m_options_toolbar, 
+	   ID_BgColorPicker);
+   m_options_toolbar->AddControl(st1);
+   m_options_toolbar->AddControl(m_bg_color_picker);
+
+   m_options_toolbar->Realize();
+
+   //add the toolbars and other options in order
+   sizer_h_1->AddSpacer(40);
+   sizer_h_1->Add(m_options_toolbar,1,wxALIGN_CENTER|wxEXPAND);
+   //sizer_h_1->AddStretchSpacer();
+   //sizer_h_1->Add(m_options_toolbar2,0,wxALIGN_CENTER|wxEXPAND);
+   sizer_h_1->AddSpacer(35);
 
    //bar left///////////////////////////////////////////////////
    wxBoxSizer* sizer_v_3 = new wxBoxSizer(wxVERTICAL);
-   st1 = new wxStaticText(this, 0, "Depth\nInt:\n");
-   m_depth_atten_chk = new wxCheckBox(this, ID_DepthAttenChk, "");
-   m_depth_atten_chk->SetValue(true);
+   m_left_toolbar = new wxToolBar(this, wxID_ANY);
+   m_left_toolbar->AddCheckTool(ID_DepthAttenChk,"Depth Interval",
+	   wxGetBitmapFromMemory(measure),wxNullBitmap,
+	   "Enable adjustment of the Depth Attenuation Interval",
+	   "Enable adjustment of the Depth Attenuation Interval");
+   m_left_toolbar->ToggleTool(ID_DepthAttenChk, true);
    m_depth_atten_factor_sldr = new wxSlider(this, ID_DepthAttenFactorSldr, 0, 0, 100,
          wxDefaultPosition, wxDefaultSize, wxSL_VERTICAL|wxSL_INVERSE);
-   m_depth_atten_reset_btn = new wxButton(this, ID_DepthAttenResetBtn, "Reset",
-         wxDefaultPosition, wxSize(60, 20));
+   m_depth_atten_factor_sldr->Disable();
+   m_depth_atten_reset_btn = new wxToolBar(this, wxID_ANY);
+   m_depth_atten_reset_btn->AddTool(ID_DepthAttenResetBtn, "Reset",
+	   wxGetBitmapFromMemory(refresh),
+	   "Reset Depth Attenuation Interval");
+   m_depth_atten_reset_btn->Realize();
    m_depth_atten_factor_text = new wxTextCtrl(this, ID_DepthAttenFactorText, "0.0",
          wxDefaultPosition, wxSize(40, 20), 0, vald_fp2);
-   sizer_v_3->Add(5, 10, 0);
-   sizer_v_3->Add(st1, 0, wxALIGN_CENTER);
-   sizer_v_3->Add(m_depth_atten_chk, 0, wxALIGN_CENTER);
-   sizer_v_3->Add(m_depth_atten_factor_sldr, 1, wxEXPAND|wxALIGN_CENTER);
-   sizer_v_3->Add(m_depth_atten_reset_btn, 0, wxALIGN_CENTER);
+   m_depth_atten_factor_text->Disable();
+
+   m_left_toolbar->Realize();
+   
+   sizer_v_3->AddSpacer(50);
+   sizer_v_3->Add(m_left_toolbar, 0, wxALIGN_CENTER);
+   sizer_v_3->Add(m_depth_atten_factor_sldr, 1, wxALIGN_CENTER);
    sizer_v_3->Add(m_depth_atten_factor_text, 0, wxALIGN_CENTER);
+   sizer_v_3->Add(m_depth_atten_reset_btn, 0, wxALIGN_CENTER);
+   sizer_v_3->AddSpacer(50);
 
    //bar right///////////////////////////////////////////////////
    wxBoxSizer* sizer_v_4 = new wxBoxSizer(wxVERTICAL);
-   st1 = new wxStaticText(this, 0, "Zoom:\n");
-   m_center_btn = new wxButton(this, ID_CenterBtn, "Center",
-         wxDefaultPosition, wxSize(65, 20));
-   m_scale_121_btn = new wxButton(this, ID_Scale121Btn, "1:1",
-         wxDefaultPosition, wxSize(40, 20));
+   st1 = new wxStaticText(this, 0, " Zoom",wxDefaultPosition,wxSize(35,-1));
+   m_center_btn = new wxToolBar(this, wxID_ANY);
+   m_center_btn->AddTool(ID_CenterBtn, "Center",
+         wxGetBitmapFromMemory(center),
+		 "Center the Data on the Render View");
+   m_center_btn->Realize();
+   m_scale_121_btn = new wxToolBar(this, wxID_ANY);
+   m_scale_121_btn->AddTool(ID_Scale121Btn, "1 to 1",
+         wxGetBitmapFromMemory(ratio),
+		 "Auto-size the data to a 1:1 ratio");
+   m_scale_121_btn->Realize();
    m_scale_factor_sldr = new wxSlider(this, ID_ScaleFactorSldr, 100, 50, 999,
          wxDefaultPosition, wxDefaultSize, wxSL_VERTICAL);
-   m_scale_reset_btn = new wxButton(this, ID_ScaleResetBtn, "Reset",
-         wxDefaultPosition, wxSize(60, 20));
+   m_scale_reset_btn = new wxToolBar(this, wxID_ANY);
+   m_scale_reset_btn->AddTool(ID_ScaleResetBtn, "Reset",
+         wxGetBitmapFromMemory(refresh),
+		 "Reset the Zoom");
+   m_scale_reset_btn->Realize();
    m_scale_factor_text = new wxTextCtrl(this, ID_ScaleFactorText, "100",
-         wxDefaultPosition, wxSize(40, 20), 0, vald_int);
+         wxDefaultPosition, wxSize(30, 20), 0, vald_int);
    m_scale_factor_spin = new wxSpinButton(this, ID_ScaleFactorSpin,
-         wxDefaultPosition, wxSize(40, 20));
-   sizer_v_4->Add(5, 10, 0);
+         wxDefaultPosition, wxSize(30, 20));
+   sizer_v_4->AddSpacer(50);
    sizer_v_4->Add(st1, 0, wxALIGN_CENTER);
    sizer_v_4->Add(m_center_btn, 0, wxALIGN_CENTER);
    sizer_v_4->Add(m_scale_121_btn, 0, wxALIGN_CENTER);
-   sizer_v_4->Add(m_scale_factor_sldr, 1, wxEXPAND|wxALIGN_CENTER);
+   sizer_v_4->Add(m_scale_factor_sldr, 1, wxALIGN_CENTER);
    sizer_v_4->Add(m_scale_factor_spin, 0, wxALIGN_CENTER);
-   sizer_v_4->Add(m_scale_reset_btn, 0, wxALIGN_CENTER);
    sizer_v_4->Add(m_scale_factor_text, 0, wxALIGN_CENTER);
+   sizer_v_4->Add(m_scale_reset_btn, 0, wxALIGN_CENTER);
+   sizer_v_4->AddSpacer(50);
 
    //middle sizer
    sizer_m->Add(sizer_v_3, 0, wxEXPAND);
@@ -10050,56 +10281,55 @@ void VRenderView::CreateBar()
 
    //bar bottom///////////////////////////////////////////////////
    wxBoxSizer* sizer_h_2 = new wxBoxSizer(wxHORIZONTAL);
-   m_rot_link_chk = new wxCheckBox(this, ID_RotLinkChk, "Link");
-   m_rot_reset_btn = new wxButton(this, ID_RotResetBtn, "Reset to 0",
-         wxDefaultPosition, wxSize(85, 20));
+   m_lower_toolbar = new wxToolBar(this,wxID_ANY);
    st1 = new wxStaticText(this, 0, "X:");
-   m_x_rot_sldr = new wxSlider(this, ID_XRotSldr, 0, 0, 360,
-         wxDefaultPosition, wxDefaultSize, wxSL_HORIZONTAL);
+   m_x_rot_sldr = new wxScrollBar(this, ID_XRotSldr);
+   m_x_rot_sldr->SetScrollbar(150,60,360,15);
    m_x_rot_text = new wxTextCtrl(this, ID_XRotText, "0.0",
-         wxDefaultPosition, wxSize(60,20), 0, vald_fp1);
-   m_x_rot_spin = new wxSpinButton(this, ID_XRotSpin,
-         wxDefaultPosition, wxSize(20, 20), wxSP_HORIZONTAL);
+         wxDefaultPosition, wxSize(45,20), 0, vald_fp1);
    st2 = new wxStaticText(this, 0, "Y:");
-   m_y_rot_sldr = new wxSlider(this, ID_YRotSldr, 0, 0, 360,
-         wxDefaultPosition, wxDefaultSize, wxSL_HORIZONTAL);
+   m_y_rot_sldr = new wxScrollBar(this, ID_YRotSldr);
+   m_y_rot_sldr->SetScrollbar(150,60,360,15);
    m_y_rot_text = new wxTextCtrl(this, ID_YRotText, "0.0",
-         wxDefaultPosition, wxSize(60,20), 0, vald_fp1);
-   m_y_rot_spin = new wxSpinButton(this, ID_YRotSpin,
-         wxDefaultPosition, wxSize(20, 20), wxSP_HORIZONTAL);
+         wxDefaultPosition, wxSize(45,20), 0, vald_fp1);
    st3 = new wxStaticText(this, 0, "Z:");
-   m_z_rot_sldr = new wxSlider(this, ID_ZRotSldr, 0, 0, 360,
-         wxDefaultPosition, wxDefaultSize, wxSL_HORIZONTAL);
+   m_z_rot_sldr = new wxScrollBar(this, ID_ZRotSldr);
+   m_z_rot_sldr->SetScrollbar(150,60,360,15);
    m_z_rot_text = new wxTextCtrl(this, ID_ZRotText, "0.0",
-         wxDefaultPosition, wxSize(60,20), 0, vald_fp1);
-   m_z_rot_spin = new wxSpinButton(this, ID_ZRotSpin,
-         wxDefaultPosition, wxSize(20, 20), wxSP_HORIZONTAL);
-   m_rot_lock_chk = new wxCheckBox(this, ID_RotLockChk, "45 Increments");
-   m_default_btn = new wxButton(this, ID_DefaultBtn, "Save as Default",
-         wxDefaultPosition, wxSize(115, 20));
-   sizer_h_2->Add(m_rot_link_chk, 0, wxALIGN_CENTER);
-   sizer_h_2->Add(m_rot_reset_btn, 0, wxALIGN_CENTER);
-   sizer_h_2->Add(5, 5, 0);
-   sizer_h_2->Add(st1, 0, wxALIGN_CENTER, 0);
-   sizer_h_2->Add(m_x_rot_sldr, 1, wxEXPAND|wxALIGN_CENTER, 0);
-   sizer_h_2->Add(m_x_rot_spin, 0, wxALIGN_CENTER, 0);
-   sizer_h_2->Add(m_x_rot_text, 0, wxALIGN_CENTER, 0);
-   sizer_h_2->Add(5, 5, 0);
-   sizer_h_2->Add(st2, 0, wxALIGN_CENTER, 0);
-   sizer_h_2->Add(m_y_rot_sldr, 1, wxEXPAND|wxALIGN_CENTER, 0);
-   sizer_h_2->Add(m_y_rot_spin, 0, wxALIGN_CENTER, 0);
-   sizer_h_2->Add(m_y_rot_text, 0, wxALIGN_CENTER, 0);
-   sizer_h_2->Add(5, 5, 0);
-   sizer_h_2->Add(st3, 0, wxALIGN_CENTER, 0);
-   sizer_h_2->Add(m_z_rot_sldr, 1, wxEXPAND|wxALIGN_CENTER, 0);
-   sizer_h_2->Add(m_z_rot_spin, 0, wxALIGN_CENTER, 0);
-   sizer_h_2->Add(m_z_rot_text, 0, wxALIGN_CENTER, 0);
-   sizer_h_2->Add(5, 5, 0);
-   sizer_h_2->Add(m_rot_lock_chk, 0, wxALIGN_CENTER, 0);
-   sizer_h_2->Add(5, 5, 0);
-   sizer_h_2->Add(m_default_btn, 0, wxALIGN_CENTER);
+         wxDefaultPosition, wxSize(45,20), 0, vald_fp1);
 
-   sizer_v->Add(sizer_h_1, 0, wxEXPAND);
+   m_lower_toolbar->AddCheckTool(ID_RotLockChk, "45 Angles",
+	   wxGetBitmapFromMemory(depth), wxNullBitmap,
+	   "Confine all angles to 45 Degrees",
+	   "Confine all angles to 45 Degrees");
+   m_lower_toolbar->AddTool(ID_RotResetBtn,"Reset",
+	   wxGetBitmapFromMemory(refresh),
+	   "Reset Rotations");
+   m_lower_toolbar->AddTool(ID_DefaultBtn,"Save",
+	   wxGetBitmapFromMemory(listicon_save),
+	   "Save as Default Rotation");
+   m_lower_toolbar->Realize();
+   
+   sizer_h_2->AddSpacer(40);
+   sizer_h_2->Add(st1, 0, wxALIGN_CENTER);
+   sizer_h_2->Add(m_x_rot_sldr, 1, wxALIGN_CENTER);
+   sizer_h_2->Add(m_x_rot_text, 0, wxALIGN_CENTER);
+   sizer_h_2->Add(5, 5, 0);
+   sizer_h_2->Add(st2, 0, wxALIGN_CENTER);
+   sizer_h_2->Add(m_y_rot_sldr, 1, wxALIGN_CENTER);
+   sizer_h_2->Add(m_y_rot_text, 0, wxALIGN_CENTER);
+   sizer_h_2->Add(5, 5, 0);
+   sizer_h_2->Add(st3, 0, wxALIGN_CENTER);
+   sizer_h_2->Add(m_z_rot_sldr, 1, wxALIGN_CENTER);
+   sizer_h_2->Add(m_z_rot_text, 0, wxALIGN_CENTER);
+   sizer_h_2->Add(5, 5, 0);
+   sizer_h_2->Add(m_lower_toolbar, 0, wxALIGN_CENTER);
+   sizer_h_2->AddSpacer(40);
+#ifndef _DARWIN
+	sizer_v->Add(sizer_h_1, 0, wxEXPAND|wxBOTTOM,3);
+#else
+	sizer_v->Add(sizer_h_1, 0, wxEXPAND);
+#endif
    sizer_v->Add(sizer_m, 1, wxEXPAND);
    sizer_v->Add(sizer_h_2, 0, wxEXPAND);
 
@@ -10247,8 +10477,12 @@ DataGroup* VRenderView::GetGroup(wxString &name)
 
 DataGroup* VRenderView::AddVolumeData(VolumeData* vd, wxString group_name)
 {
-   if (m_glview)
+   if (m_glview) {
+	  double val = 50.;
+	  m_scale_text->GetValue().ToDouble(&val);
+	  m_glview->SetScaleBarLen(val);
       return m_glview->AddVolumeData(vd, group_name);
+   }
    else
       return 0;
 }
@@ -10700,8 +10934,8 @@ void VRenderView::SetFog(bool b)
 {
    if (m_glview)
       m_glview->SetFog(b);
-   if (m_depth_atten_chk)
-      m_depth_atten_chk->SetValue(b);
+   if (m_left_toolbar)
+      m_left_toolbar->ToggleTool(ID_DepthAttenChk, b);
 }
 
 bool VRenderView::GetFog()
@@ -10997,7 +11231,7 @@ void VRenderView::OnCapture(wxCommandEvent& event)
 //bar left
 void VRenderView::OnDepthAttenCheck(wxCommandEvent& event)
 {
-   if (m_depth_atten_chk->GetValue())
+   if (m_left_toolbar->GetToolState(ID_DepthAttenChk))
    {
       SetFog(true);
       m_depth_atten_factor_sldr->Enable();
@@ -11139,37 +11373,32 @@ void VRenderView::OnValueEdit(wxCommandEvent& event)
    UpdateView(false);
 }
 
-void VRenderView::OnRotLink(wxCommandEvent& event)
+void VRenderView::OnRotLink(bool b)
 {
-   if (m_rot_link_chk->GetValue())
+   m_glview->m_linked_rot = true;
+   double rotx, roty, rotz;
+   m_glview->GetRotations(rotx, roty, rotz);
+   VRenderFrame* vr_frame = (VRenderFrame*)m_frame;
+   if (vr_frame)
    {
-      m_glview->m_linked_rot = true;
-      double rotx, roty, rotz;
-      m_glview->GetRotations(rotx, roty, rotz);
-      VRenderFrame* vr_frame = (VRenderFrame*)m_frame;
-      if (vr_frame)
+      for (int i=0; i<vr_frame->GetViewNum(); i++)
       {
-         for (int i=0; i<vr_frame->GetViewNum(); i++)
+         VRenderView* view = vr_frame->GetView(i);
+         if (view)
          {
-            VRenderView* view = vr_frame->GetView(i);
-            if (view)
-            {
-               view->m_glview->m_linked_rot = true;
-               view->m_rot_link_chk->SetValue(true);
-               view->m_glview->SetRotations(rotx, roty, rotz);
-            }
+            view->m_glview->m_linked_rot = b;
+            view->m_glview->SetRotations(rotx, roty, rotz);
+            view->m_glview->RefreshGL();
          }
       }
    }
-   else
-      m_glview->m_linked_rot = false;
 }
 
 void VRenderView::OnRotReset(wxCommandEvent &event)
 {
-   m_x_rot_sldr->SetValue(0);
-   m_y_rot_sldr->SetValue(0);
-   m_z_rot_sldr->SetValue(0);
+   m_x_rot_sldr->SetThumbPosition(m_x_rot_sldr->GetRange()/2 - 30);
+   m_y_rot_sldr->SetThumbPosition(m_y_rot_sldr->GetRange()/2 - 30);
+   m_z_rot_sldr->SetThumbPosition(m_z_rot_sldr->GetRange()/2 - 30);
    m_x_rot_text->ChangeValue("0.0");
    m_y_rot_text->ChangeValue("0.0");
    m_z_rot_text->ChangeValue("0.0");
@@ -11178,115 +11407,126 @@ void VRenderView::OnRotReset(wxCommandEvent &event)
    if (m_glview->m_mouse_focus)
       m_glview->SetFocus();
 }
+//timer used for rotation scrollbars
+void VRenderView::OnTimer(wxTimerEvent& event) {
+	wxString str;
+    bool lock = m_lower_toolbar->GetToolState(ID_RotLockChk);
+    double rotx, roty, rotz;
+    m_glview->GetRotations(rotx, roty, rotz);
+	//the X bar positions
+	int pos = m_x_rot_sldr->GetThumbPosition ();
+	int mid = m_x_rot_sldr->GetRange() / 2 - 30;
+	rotx = lock?(((int)((rotx + (pos - mid))/45))*45):(rotx + (pos - mid) / 10.);
+	if (rotx < 360.) rotx +=360.;
+	if (rotx > 360.) rotx -=360.;
+	str = wxString::Format("%.1f", rotx);
+	if ((std::abs(pos - mid) > 1)) {
+		if (!m_x_rotating) {
+			m_x_rot_sldr->SetThumbPosition ((mid + pos) / 2. + 0.5);
+		}
+		m_x_rot_text->SetValue(str);
+	}
+	//the Y bar positions
+	pos = m_y_rot_sldr->GetThumbPosition ();
+	roty = lock?(((int)((roty + (pos - mid))/45))*45):(roty + (pos - mid) / 10.);
+	if (roty < 360.) roty +=360.;
+	if (roty > 360.) roty -=360.;
+	str = wxString::Format("%.1f", roty);
+	if ((std::abs(pos - mid) > 1)) {
+		if (!m_y_rotating) {
+			m_y_rot_sldr->SetThumbPosition ((mid + pos) / 2. + 0.5);
+		}
+		m_y_rot_text->SetValue(str);
+	}
+	//the Z bar positions
+	pos = m_z_rot_sldr->GetThumbPosition ();
+	rotz = lock?(((int)((rotz + (pos - mid))/45))*45):(rotz + (pos - mid) / 10.);
+	if (rotz < 360.) rotz +=360.;
+	if (rotz > 360.) rotz -=360.;
+	str = wxString::Format("%.1f", rotz);
+	if ((std::abs(pos - mid) > 1)) {
+		if (!m_z_rotating) {
+			m_z_rot_sldr->SetThumbPosition ((mid + pos) / 2. + 0.5);
+		}
+		m_z_rot_text->SetValue(str);
+	}
+}
 
 void VRenderView::OnXRotScroll(wxScrollEvent& event)
 {
-   int val = event.GetPosition();
-   double dval = m_glview->GetRotLock()?val*45.0:val;
-   wxString str = wxString::Format("%.1f", dval);
-   m_x_rot_text->SetValue(str);
+   bool lock = m_lower_toolbar->GetToolState(ID_RotLockChk);
+   wxString str;
+   double rotx, roty, rotz;
+   m_glview->GetRotations(rotx, roty, rotz);
+   if (event.GetEventType() == wxEVT_SCROLL_THUMBTRACK )
+      m_x_rotating = true;
+   else if (event.GetEventType() == wxEVT_SCROLL_THUMBRELEASE  )
+      m_x_rotating = false;
+   else if (event.GetEventType() == wxEVT_SCROLL_LINEDOWN) {
+	   str = wxString::Format("%.1f", lock?(rotx + 45):(rotx + 1));
+	   m_x_rot_text->SetValue(str);
+   } else if (event.GetEventType() == wxEVT_SCROLL_LINEUP) {
+	   str = wxString::Format("%.1f", lock?(rotx - 45):(rotx - 1));
+	   m_x_rot_text->SetValue(str);
+   }
 }
 
 void VRenderView::OnYRotScroll(wxScrollEvent& event)
 {
-   int val = event.GetPosition();
-   double dval = m_glview->GetRotLock()?val*45.0:val;
-   wxString str = wxString::Format("%.1f", dval);
-   m_y_rot_text->SetValue(str);
+   bool lock = m_lower_toolbar->GetToolState(ID_RotLockChk);
+   wxString str;
+   double rotx, roty, rotz;
+   m_glview->GetRotations(rotx, roty, rotz);
+   if (event.GetEventType() == wxEVT_SCROLL_THUMBTRACK )
+      m_y_rotating = true;
+   else if (event.GetEventType() == wxEVT_SCROLL_THUMBRELEASE  )
+      m_y_rotating = false;
+   else if (event.GetEventType() == wxEVT_SCROLL_LINEDOWN) {
+	   str = wxString::Format("%.1f", lock?(roty + 45):(roty + 1));
+	   m_y_rot_text->SetValue(str);
+   } else if (event.GetEventType() == wxEVT_SCROLL_LINEUP) {
+	   str = wxString::Format("%.1f", lock?(roty - 45):(roty - 1));
+	   m_y_rot_text->SetValue(str);
+   }
 }
 
 void VRenderView::OnZRotScroll(wxScrollEvent& event)
 {
-   int val = event.GetPosition();
-   double dval = m_glview->GetRotLock()?val*45.0:val;
-   wxString str = wxString::Format("%.1f", dval);
-   m_z_rot_text->SetValue(str);
+   bool lock = m_lower_toolbar->GetToolState(ID_RotLockChk);
+   wxString str;
+   double rotx, roty, rotz;
+   m_glview->GetRotations(rotx, roty, rotz);
+   if (event.GetEventType() == wxEVT_SCROLL_THUMBTRACK )
+      m_z_rotating = true;
+   else if (event.GetEventType() == wxEVT_SCROLL_THUMBRELEASE  )
+      m_z_rotating = false;
+   else if (event.GetEventType() == wxEVT_SCROLL_LINEDOWN) {
+	   str = wxString::Format("%.1f", lock?(rotz + 45):(rotz + 1));
+	   m_z_rot_text->SetValue(str);
+   } else if (event.GetEventType() == wxEVT_SCROLL_LINEUP) {
+	   str = wxString::Format("%.1f", lock?(rotz - 45):(rotz - 1));
+	   m_z_rot_text->SetValue(str);
+   }
 }
 
 void VRenderView::OnRotLockCheck(wxCommandEvent& event)
 {
-   if (m_rot_lock_chk->GetValue())
-   {
-      m_glview->SetRotLock(true);
-      //sliders
-      m_x_rot_sldr->SetRange(0, 8);
-      m_y_rot_sldr->SetRange(0, 8);
-      m_z_rot_sldr->SetRange(0, 8);
-      double rotx, roty, rotz;
-      m_glview->GetRotations(rotx, roty, rotz);
-      m_x_rot_sldr->SetValue(int(rotx/45.0));
-      m_y_rot_sldr->SetValue(int(roty/45.0));
-      m_z_rot_sldr->SetValue(int(rotz/45.0));
+   bool lock = m_lower_toolbar->GetToolState(ID_RotLockChk);
+   double rotx, roty, rotz;
+   m_glview->GetRotations(rotx, roty, rotz);
+   if (lock) {
+	   rotx = (((int)(rotx/45))*45);
+	   roty = (((int)(roty/45))*45);
+	   rotz = (((int)(rotz/45))*45);
    }
-   else
-   {
-      m_glview->SetRotLock(false);
-      //sliders
-      m_x_rot_sldr->SetRange(0, 360);
-      m_y_rot_sldr->SetRange(0, 360);
-      m_z_rot_sldr->SetRange(0, 360);
-      double rotx, roty, rotz;
-      m_glview->GetRotations(rotx, roty, rotz);
-      m_x_rot_sldr->SetValue(int(rotx));
-      m_y_rot_sldr->SetValue(int(roty));
-      m_z_rot_sldr->SetValue(int(rotz));
-   }
-}
-
-void VRenderView::OnXRotSpinUp(wxSpinEvent& event)
-{
-   wxString str_val = m_x_rot_text->GetValue();
-   int value = STOI(str_val.fn_str())+1;
-   value = value>360?value-360:value;
-   wxString str = wxString::Format("%.1f", double(value));
+   m_glview->SetRotLock(lock);
+   wxString str = wxString::Format("%.1f", rotx);
    m_x_rot_text->SetValue(str);
-}
-
-void VRenderView::OnXRotSpinDown(wxSpinEvent& event)
-{
-   wxString str_val = m_x_rot_text->GetValue();
-   int value = STOI(str_val.fn_str())-1;
-   value = value<0?value+360:value;
-   wxString str = wxString::Format("%.1f", double(value));
-   m_x_rot_text->SetValue(str);
-}
-
-void VRenderView::OnYRotSpinUp(wxSpinEvent& event)
-{
-   wxString str_val = m_y_rot_text->GetValue();
-   int value = STOI(str_val.fn_str())+1;
-   value = value>360?value-360:value;
-   wxString str = wxString::Format("%.1f", double(value));
+   str = wxString::Format("%.1f", roty);
    m_y_rot_text->SetValue(str);
-}
-
-void VRenderView::OnYRotSpinDown(wxSpinEvent& event)
-{
-   wxString str_val = m_y_rot_text->GetValue();
-   int value = STOI(str_val.fn_str())-1;
-   value = value<0?value+360:value;
-   wxString str = wxString::Format("%.1f", double(value));
-   m_y_rot_text->SetValue(str);
-}
-
-void VRenderView::OnZRotSpinUp(wxSpinEvent& event)
-{
-   wxString str_val = m_z_rot_text->GetValue();
-   int value = STOI(str_val.fn_str())+1;
-   value = value>360?value-360:value;
-   wxString str = wxString::Format("%.1f", double(value));
+   str = wxString::Format("%.1f", rotz);
    m_z_rot_text->SetValue(str);
 }
-
-void VRenderView::OnZRotSpinDown(wxSpinEvent& event)
-{
-   wxString str_val = m_z_rot_text->GetValue();
-   int value = STOI(str_val.fn_str())-1;
-   value = value<0?value+360:value;
-   wxString str = wxString::Format("%.1f", double(value));
-   m_z_rot_text->SetValue(str);
-}
-
 //top
 void VRenderView::OnBgColorChange(wxColourPickerEvent& event)
 {
@@ -11298,26 +11538,94 @@ void VRenderView::OnBgColorChange(wxColourPickerEvent& event)
 
 void VRenderView::OnCamCtrCheck(wxCommandEvent& event)
 {
-   m_glview->m_draw_camctr = m_cam_ctr_chk->GetValue();
+   m_glview->m_draw_camctr = 
+	   m_options_toolbar->GetToolState(ID_CamCtrChk);
    RefreshGL();
 }
 
 void VRenderView::OnFpsCheck(wxCommandEvent& event)
 {
-   m_glview->m_draw_info = m_fps_chk->GetValue();
+   m_glview->m_draw_info = 
+	   m_options_toolbar->GetToolState(ID_FpsChk);
    m_glview->m_draw_coord = m_glview->m_draw_info;
    RefreshGL();
 }
 
 void VRenderView::OnLegendCheck(wxCommandEvent& event)
 {
-   m_glview->m_draw_legend = m_legend_chk->GetValue();
+   m_glview->m_draw_legend = 
+	   m_options_toolbar->GetToolState(ID_LegendChk);
    RefreshGL();
 }
 
-void VRenderView::OnIntpCheck(wxCommandEvent& event)
+void VRenderView::OnScaleTextEditing(wxCommandEvent& event) {
+      wxString str, num_text, unit_text;
+      num_text = m_scale_text->GetValue();
+      str = num_text + " ";
+      switch (m_scale_cmb->GetSelection())
+      {
+      case 0:
+         unit_text = "nm";
+         break;
+      case 1:
+      default:
+         unit_text = wxString::Format("%c%c", 131, 'm');
+         break;
+      case 2:
+         unit_text = "mm";
+         break;
+      }
+      str += unit_text;
+	  if (m_glview) {
+		  m_glview->SetSBText(str);
+		  m_glview->m_sb_num = num_text;
+		  m_glview->m_sb_unit = m_scale_cmb->GetSelection();
+	  }
+	  RefreshGL();
+}
+
+void VRenderView::OnScaleUnitSelected(wxCommandEvent& event) {
+}
+
+void VRenderView::OnScaleBar(wxCommandEvent& event)
 {
-   m_glview->SetIntp(m_intp_chk->GetValue());
+	switch (m_draw_scalebar) {
+	case kOff:
+		m_draw_scalebar = kOn;
+		m_glview->m_disp_scale_bar = true;
+		m_glview->m_disp_scale_bar_text = false;
+		m_options_toolbar->SetToolNormalBitmap(ID_ScaleBar,
+			   wxGetBitmapFromMemory(scale));
+		m_scale_text->Disable();
+		m_scale_cmb->Disable();
+		if (m_glview) m_glview->EnableScaleBar();
+		if (m_glview) m_glview->DisableSBText();
+		break;
+	case kOn:
+		m_draw_scalebar = kText;
+		m_glview->m_disp_scale_bar = true;
+		m_glview->m_disp_scale_bar_text = true;
+		m_options_toolbar->SetToolNormalBitmap(ID_ScaleBar,
+			   wxGetBitmapFromMemory(scale_text));
+		m_scale_text->Enable();
+		m_scale_cmb->Enable();
+		if (m_glview) m_glview->EnableSBText();
+		if (m_glview) m_glview->EnableScaleBar();
+		break;
+	case kText:
+		m_draw_scalebar = kOff;
+		m_glview->m_disp_scale_bar = false;
+		m_glview->m_disp_scale_bar_text = false;
+		m_options_toolbar->SetToolNormalBitmap(ID_ScaleBar,
+			   wxGetBitmapFromMemory(scale_text_off));
+		m_scale_text->Disable();
+		m_scale_cmb->Disable();
+		if (m_glview) m_glview->DisableScaleBar();
+		if (m_glview) m_glview->DisableSBText();
+		break;
+	default:
+		break;
+	}
    RefreshGL();
 }
 
@@ -11388,8 +11696,8 @@ void VRenderView::OnAovText(wxCommandEvent& event)
 
 void VRenderView::OnFreeChk(wxCommandEvent& event)
 {
-   if (m_free_chk->GetValue())
-      SetFree(true);
+   if (m_options_toolbar->GetToolState(ID_FreeChk))
+      SetFree(true); 
    else
    {
       SetFree(false);
@@ -11409,11 +11717,11 @@ void VRenderView::OnSaveDefault(wxCommandEvent &event)
 
    //render modes
    bool bVal;
-   bVal = m_volume_seq_rd->GetValue();
+   bVal = m_options_toolbar->GetToolState(ID_VolumeSeqRd);
    fconfig.Write("volume_seq_rd", bVal);
-   bVal = m_volume_multi_rd->GetValue();
+   bVal = m_options_toolbar->GetToolState(ID_VolumeMultiRd);
    fconfig.Write("volume_multi_rd", bVal);
-   bVal = m_volume_comp_rd->GetValue();
+   bVal = m_options_toolbar->GetToolState(ID_VolumeCompRd);
    fconfig.Write("volume_comp_rd", bVal);
    //background color
    wxColor cVal;
@@ -11421,16 +11729,13 @@ void VRenderView::OnSaveDefault(wxCommandEvent &event)
    str = wxString::Format("%d %d %d", cVal.Red(), cVal.Green(), cVal.Blue());
    fconfig.Write("bg_color_picker", str);
    //camera center
-   bVal = m_cam_ctr_chk->GetValue();
+   bVal = m_options_toolbar->GetToolState(ID_CamCtrChk);
    fconfig.Write("cam_ctr_chk", bVal);
    //camctr size
    fconfig.Write("camctr_size", m_glview->m_camctr_size);
    //fps
-   bVal = m_fps_chk->GetValue();
+   bVal = m_options_toolbar->GetToolState(ID_FpsChk);
    fconfig.Write("fps_chk", bVal);
-   //interpolation
-   bVal = m_intp_chk->GetValue();
-   fconfig.Write("intp_chk", bVal);
    //selection
    bVal = m_glview->m_draw_legend;
    fconfig.Write("legend_chk", bVal);
@@ -11440,7 +11745,7 @@ void VRenderView::OnSaveDefault(wxCommandEvent &event)
    //ortho/persp
    fconfig.Write("persp", m_glview->m_persp);
    fconfig.Write("aov", m_glview->m_aov);
-   bVal = m_free_chk->GetValue();
+   bVal = m_options_toolbar->GetToolState(ID_FreeChk);
    fconfig.Write("free_rd", bVal);
    //rotations
    str = m_x_rot_text->GetValue();
@@ -11451,7 +11756,7 @@ void VRenderView::OnSaveDefault(wxCommandEvent &event)
    fconfig.Write("z_rot", str);
    fconfig.Write("rot_lock", m_glview->GetRotLock());
    //depth atten
-   bVal = m_depth_atten_chk->GetValue();
+   bVal = m_left_toolbar->GetToolState(ID_DepthAttenChk);
    fconfig.Write("depth_atten_chk", bVal);
    str = m_depth_atten_factor_text->GetValue();
    fconfig.Write("depth_atten_factor_text", str);
@@ -11504,19 +11809,19 @@ void VRenderView::LoadSettings()
    double dVal;
    if (fconfig.Read("volume_seq_rd", &bVal))
    {
-      m_volume_seq_rd->SetValue(bVal);
+      m_options_toolbar->ToggleTool(ID_VolumeSeqRd,bVal);
       if (bVal)
          SetVolMethod(VOL_METHOD_SEQ);
    }
    if (fconfig.Read("volume_multi_rd", &bVal))
    {
-      m_volume_multi_rd->SetValue(bVal);
+      m_options_toolbar->ToggleTool(ID_VolumeMultiRd,bVal);
       if (bVal)
          SetVolMethod(VOL_METHOD_MULTI);
    }
    if (fconfig.Read("volume_comp_rd", &bVal))
    {
-      m_volume_comp_rd->SetValue(bVal);
+      m_options_toolbar->ToggleTool(ID_VolumeCompRd,bVal);
       if (bVal)
          SetVolMethod(VOL_METHOD_COMP);
    }
@@ -11532,7 +11837,7 @@ void VRenderView::LoadSettings()
    }
    if (fconfig.Read("cam_ctr_chk", &bVal))
    {
-      m_cam_ctr_chk->SetValue(bVal);
+      m_options_toolbar->ToggleTool(ID_CamCtrChk,bVal);
       m_glview->m_draw_camctr = bVal;
    }
    if (fconfig.Read("camctr_size", &dVal))
@@ -11541,18 +11846,13 @@ void VRenderView::LoadSettings()
    }
    if (fconfig.Read("fps_chk", &bVal))
    {
-      m_fps_chk->SetValue(bVal);
+      m_options_toolbar->ToggleTool(ID_FpsChk,bVal);
       m_glview->m_draw_info = bVal;
       m_glview->m_draw_coord = bVal;
    }
-   if (fconfig.Read("intp_chk", &bVal))
-   {
-      m_intp_chk->SetValue(bVal);
-      m_glview->SetIntp(bVal);
-   }
    if (fconfig.Read("legend_chk", &bVal))
    {
-      m_legend_chk->SetValue(bVal);
+      m_options_toolbar->ToggleTool(ID_LegendChk,bVal);
       m_glview->m_draw_legend = bVal;
    }
    if (fconfig.Read("mouse_focus", &bVal))
@@ -11572,7 +11872,7 @@ void VRenderView::LoadSettings()
    }
    if (fconfig.Read("free_rd", &bVal))
    {
-      m_free_chk->SetValue(bVal);
+      m_options_toolbar->ToggleTool(ID_FreeChk,bVal);
       if (bVal)
          SetFree(true);
    }
@@ -11593,7 +11893,7 @@ void VRenderView::LoadSettings()
    }
    if (fconfig.Read("rot_lock", &bVal))
    {
-      m_rot_lock_chk->SetValue(bVal);
+	  m_lower_toolbar->ToggleTool(ID_RotLockChk,bVal);
       m_glview->SetRotLock(bVal);
    }
    UpdateView();  //for rotations
@@ -11607,7 +11907,7 @@ void VRenderView::LoadSettings()
    }
    if (fconfig.Read("depth_atten_chk", &bVal))
    {
-      m_depth_atten_chk->SetValue(bVal);
+	  m_left_toolbar->ToggleTool(ID_DepthAttenChk,bVal);
       if (bVal)
          SetFog(true);
       else

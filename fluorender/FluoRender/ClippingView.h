@@ -4,7 +4,6 @@
 #include <wx/slider.h>
 #include <wx/spinbutt.h>
 
-
 #ifndef _CLIPPINGVIEW_H_
 #define _CLIPPINGVIEW_H_
 
@@ -71,41 +70,38 @@ public:
 
 	bool GetChannLink()
 	{
-		return m_link_channels->GetValue();
+		return m_link_channels->GetToolState(ID_LinkChannelsChk);
 	}
-	void SetChannLink(bool chann)
-	{
-		m_link_channels->SetValue(chann);
-	}
+	void SetChannLink(bool chann);
 	bool GetXLink()
 	{
-		return m_link_x_chk->GetValue();
+		return m_check_tb->GetToolState(ID_LinkXChk);
 	}
 	bool GetYLink()
 	{
-		return m_link_y_chk->GetValue();
+		return m_check_tb->GetToolState(ID_LinkYChk);
 	}
 	bool GetZLink()
 	{
-		return m_link_z_chk->GetValue();
+		return m_check_tb->GetToolState(ID_LinkZChk);
 	}
 	void SetXLink(bool link)
 	{
-		m_link_x_chk->SetValue(link);
+		m_check_tb->ToggleTool(ID_LinkXChk,link);
 		m_link_x = link;
 		wxCommandEvent ev;
 		OnLinkXCheck(ev);
 	}
 	void SetYLink(bool link)
 	{
-		m_link_y_chk->SetValue(link);
+		m_check_tb->ToggleTool(ID_LinkYChk,link);
 		m_link_y = link;
 		wxCommandEvent ev;
 		OnLinkYCheck(ev);
 	}
 	void SetZLink(bool link)
 	{
-		m_link_z_chk->SetValue(link);
+		m_check_tb->ToggleTool(ID_LinkZChk,link);
 		m_link_z  = link;
 		wxCommandEvent ev;
 		OnLinkZCheck(ev);
@@ -142,7 +138,7 @@ private:
 	bool m_link_z;
 
 	//1st line
-	wxCheckBox *m_link_channels;
+	wxToolBar *m_link_channels;
 	wxButton *m_clip_reset_btn;
 	//fix plane rotations
 	wxButton *m_set_zero_btn;
@@ -178,11 +174,12 @@ private:
 	//z2
 	wxSlider *m_z2_clip_sldr;
 	wxTextCtrl *m_z2_clip_text;
+	//keep 1 panel for sizing reasons
+	wxPanel * m_xpanel;
+	//highlighters
+	wxStaticText * m_xBar, * m_yBar, * m_zBar;
 
-	//linkers
-	wxCheckBox *m_link_x_chk;
-	wxCheckBox *m_link_y_chk;
-	wxCheckBox *m_link_z_chk;
+	wxToolBar * m_check_tb;
 
 	//buttons
 	wxButton *m_yz_clip_btn;

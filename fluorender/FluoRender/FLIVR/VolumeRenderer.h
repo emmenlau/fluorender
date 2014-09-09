@@ -113,6 +113,10 @@ namespace FLIVR
 		void set_planes(vector<Plane*> *p);
 		vector<Plane*> *get_planes();
 
+		//interpolation
+		bool get_interpolate();
+		void set_interpolate(bool b);
+
 		//depth peel
 		void set_depth_peel(int dp) {depth_peel_ = dp;}
 		int get_depth_peel() {return depth_peel_;}
@@ -121,12 +125,12 @@ namespace FLIVR
 		virtual void draw(bool draw_wireframe_p, 
 			bool interactive_mode_p, 
 			bool orthographic_p = false,
-			double zoom = 1.0, bool intp = true,
+			double zoom = 1.0, 
 			int mode = 0);
 		void draw_wireframe(bool orthographic_p = false);
 		void draw_volume(bool interactive_mode_p,
 			bool orthographic_p = false,
-			double zoom = 1.0, bool intp = true,
+			double zoom = 1.0, 
 			int mode = 0);
 		//type: 0-initial; 1-diffusion-based growing; 2-masked filtering
 		//paint_mode: 1-select; 2-append; 3-erase; 4-diffuse; 5-flood; 6-clear; 7-all;
@@ -138,7 +142,7 @@ namespace FLIVR
 		//generate the labeling assuming the mask is already generated
 		//type: 0-initialization; 1-maximum intensity filtering
 		//mode: 0-normal; 1-posterized
-		void draw_label(int type, int mode, double thresh); 
+		void draw_label(int type, int mode, double thresh, double gm_falloff);
 
 		//calculation
 		void calculate(int type, VolumeRenderer* vr_a, VolumeRenderer* vr_b);
@@ -200,6 +204,8 @@ namespace FLIVR
 		double colormap_hi_value_;
 		//solid
 		bool solid_;
+		//interpolation
+		bool interpolate_;
 		//adaptive
 		bool adaptive_;
 		//planes
@@ -244,7 +250,6 @@ namespace FLIVR
 			double zoom, double sf);	//type - 1:min filter
 										//		 2:max filter
 										//		 3:sharpening
-
 	};
 
 } // End namespace FLIVR

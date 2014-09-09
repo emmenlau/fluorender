@@ -24,6 +24,8 @@ BEGIN_EVENT_TABLE(SettingDlg, wxPanel)
 	EVT_TEXT(ID_ShadowDirText, SettingDlg::OnShadowDirEdit)
 	//gradient background
 	EVT_CHECKBOX(ID_GradBgChk, SettingDlg::OnGradBgCheck)
+	//link render views rotations
+    EVT_CHECKBOX(ID_RotLinkChk, SettingDlg::OnRotLink)
 	//override vox
 	EVT_CHECKBOX(ID_OverrideVoxChk, SettingDlg::OnOverrideVoxCheck)
 	//wavelength to color
@@ -192,8 +194,24 @@ wxWindow* SettingDlg::CreateRenderingPage(wxWindow *parent)
 	group4->Add(10, 5);
 	group4->Add(sizer4_1, 0, wxEXPAND);
 	group4->Add(10, 5);
+	//link rotations
+	wxBoxSizer* group5 = new wxStaticBoxSizer(
+		new wxStaticBox(page, wxID_ANY, "Rotations"), wxVERTICAL);
+	wxBoxSizer *sizer5_1 = new wxBoxSizer(wxHORIZONTAL);
+	m_rot_link_chk = new wxCheckBox(page, ID_RotLinkChk,
+		"Link all rendering views' rotations.");
+	sizer5_1->Add(m_rot_link_chk, 0, wxALIGN_CENTER);
+	group5->Add(10, 5);
+	group5->Add(sizer5_1, 0, wxEXPAND);
+	group5->Add(10, 5);
+	// combine gradient and rotations checks
+	wxBoxSizer* group4_5 = new wxBoxSizer(wxHORIZONTAL);
+	group4_5->Add(group4, 0, wxEXPAND);
+	group4_5->AddStretchSpacer();
+	group4_5->Add(group5, 0, wxEXPAND);
 
 	wxBoxSizer *sizerV = new wxBoxSizer(wxVERTICAL);
+
 	sizerV->Add(10, 10);
 	sizerV->Add(group1, 0, wxEXPAND);
 	sizerV->Add(10, 10);
@@ -201,7 +219,7 @@ wxWindow* SettingDlg::CreateRenderingPage(wxWindow *parent)
 	sizerV->Add(10, 10);
 	sizerV->Add(group3, 0, wxEXPAND);
 	sizerV->Add(10, 10);
-	sizerV->Add(group4, 0, wxEXPAND);
+	sizerV->Add(group4_5, 0, wxEXPAND);
 
 	page->SetSizer(sizerV);
 	return page;
@@ -509,6 +527,8 @@ void SettingDlg::GetSettings()
 	m_point_volume_mode = 0;
 	m_ruler_use_transf = false;
 	m_ruler_time_dep = true;
+	m_pvxml_flip_x = false;
+	m_pvxml_flip_y = false;
 
 	wxFileInputStream is(SETTING_FILE_NAME);
 	if (!is.IsOk())
@@ -662,6 +682,13 @@ void SettingDlg::GetSettings()
 		fconfig.SetPath("/ruler time dep");
 		fconfig.Read("value", &m_ruler_time_dep);
 	}
+	//flags for pvxml flipping
+	if (fconfig.Exists("/pvxml flip"))
+	{
+		fconfig.SetPath("/pvxml flip");
+		fconfig.Read("x", &m_pvxml_flip_x);
+		fconfig.Read("y", &m_pvxml_flip_y);
+	}
 
 	UpdateUI();
 }
@@ -806,6 +833,11 @@ void SettingDlg::SaveSettings()
 	//ruler time dependent
 	fconfig.SetPath("/ruler time dependent");
 	fconfig.Write("value", m_ruler_time_dep);
+
+	//flags for flipping pvxml
+	fconfig.SetPath("/pvxml flip");
+	fconfig.Write("x", m_pvxml_flip_x);
+	fconfig.Write("y", m_pvxml_flip_y);
 
 	wxFileOutputStream os(SETTING_FILE_NAME);
 	fconfig.Save(os);
@@ -1079,6 +1111,19 @@ void SettingDlg::OnGradBgCheck(wxCommandEvent &event)
 			}
 		}
 	}
+}
+
+//link rotations
+void SettingDlg::OnRotLink(wxCommandEvent& event)
+{
+	
+   VRenderFrame* vr_frame = (VRenderFrame*)m_frame;
+   if (vr_frame && 0 < vr_frame->GetViewNum()) {
+     VRenderView* view = vr_frame->GetView(0);
+	 if (view) {
+		view->OnRotLink(m_rot_link_chk->GetValue());
+	 }
+   }
 }
 
 //override vox

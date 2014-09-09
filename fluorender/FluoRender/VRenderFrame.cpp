@@ -18,21 +18,47 @@
 //resources
 #include "img/icon_32.h"
 #include "img/icon_open_volume.h"
+#include "img/icon_open_volume_mini.h"
 #include "img/icon_open_project.h"
+#include "img/icon_open_project_mini.h"
 #include "img/icon_save_project.h"
+#include "img/icon_save_project_mini.h"
 #include "img/icon_new_view.h"
+#include "img/icon_new_view_mini.h"
 #include "img/icon_show_hide_ui.h"
+#include "img/icon_show_hide_ui_mini.h"
 #include "img/icon_open_mesh.h"
+#include "img/icon_open_mesh_mini.h"
 #include "img/icon_edit.h"
+#include "img/icon_edit_mini.h"
 #include "img/icon_recorder.h"
+#include "img/icon_recorder_mini.h"
 #include "img/icon_settings.h"
+#include "img/icon_settings_mini.h"
 #include "img/icon_check_updates.h"
+#include "img/icon_check_updates_mini.h"
 #include "img/icon_facebook.h"
+#include "img/icon_facebook_mini.h"
 #include "img/icon_twitter.h"
+#include "img/icon_twitter_mini.h"
 #include "img/icon_about.h"
+#include "img/icon_about_mini.h"
 #include "img/logo_snow.h"
 #include "img/logo.h"
 #include "img/icon_measure.h"
+
+
+#include "img/camera.h"
+#include "img/align.h"
+#include "img/center.h"
+#include "img/composite.h"
+#include "img/depth.h"
+#include "img/layers.h"
+#include "img/link.h"
+#include "img/measure.h"
+#include "img/ratio.h"
+#include "img/refresh.h"
+#include "img/unlink.h"
 
 BEGIN_EVENT_TABLE(VRenderFrame, wxFrame)
 EVT_MENU(wxID_EXIT, VRenderFrame::OnExit)
@@ -59,6 +85,7 @@ EVT_MENU(ID_Trace, VRenderFrame::OnTrace)
 EVT_MENU(ID_Twitter, VRenderFrame::OnTwitter)
 EVT_MENU(ID_Facebook, VRenderFrame::OnFacebook)
 EVT_MENU(ID_ShowHideUI, VRenderFrame::OnShowHideUI)
+EVT_MENU(ID_ShowHideToolbar, VRenderFrame::OnShowHideToolbar)
 //ui menu events
 EVT_MENU(ID_UIListView, VRenderFrame::OnShowHideView)
 EVT_MENU(ID_UITreeView, VRenderFrame::OnShowHideView)
@@ -185,15 +212,15 @@ m_free_version(true)
 #else
     m_main_tb->AddTool(ID_PaintTool, "Edit",
                        wxGetBitmapFromMemory(icon_edit), wxNullBitmap,
-                       m_free_version?wxITEM_NORMAL:wxITEM_DROPDOWN,
+                       wxITEM_DROPDOWN,
                        "Edit: Tools for editing volume data",
                        "Edit: Tools for editing volume data");
+    m_main_tb->SetDropdownMenu(ID_PaintTool, m_tb_menu_edit);
 #endif
-      m_main_tb->SetDropdownMenu(ID_PaintTool, m_tb_menu_edit);
-      m_main_tb->AddTool(ID_Recorder, "Recorder",
-            wxGetBitmapFromMemory(icon_recorder), wxNullBitmap, wxITEM_NORMAL,
-            "Recorder: Record actions by key frames and play back",
-            "Recorder: Record actions by key frames and play back");
+    //m_main_tb->AddTool(ID_Recorder, "Recorder",
+    //        wxGetBitmapFromMemory(icon_recorder), wxNullBitmap, wxITEM_NORMAL,
+    //        "Recorder: Record actions by key frames and play back",
+    //        "Recorder: Record actions by key frames and play back");
    m_main_tb->AddSeparator();
    m_main_tb->AddTool(ID_Settings, "Settings",
          wxGetBitmapFromMemory(icon_settings), wxNullBitmap, wxITEM_NORMAL,
@@ -233,13 +260,13 @@ m_free_version(true)
    m_tree_panel = new TreePanel(this, this, wxID_ANY,
          wxDefaultPosition, wxSize(350, 300));
 
-   //create movie view
+   //create movie view (sets the m_recorder_dlg)
    m_movie_view = new VMovieView(this, this, wxID_ANY,
          wxDefaultPosition, wxSize(350, 300));
 
    //create prop panel
    m_prop_panel = new wxPanel(this, wxID_ANY,
-         wxDefaultPosition, wxSize(1100, 150), 0, "PropPanel");
+         wxDefaultPosition, wxDefaultSize, 0, "PropPanel");
    //prop panel chidren
    m_prop_sizer = new wxBoxSizer(wxHORIZONTAL);
    m_volume_prop = new VPropView(this, m_prop_panel, wxID_ANY);
@@ -253,7 +280,7 @@ m_free_version(true)
 
    //clipping view
    m_clip_view = new ClippingView(this, this, wxID_ANY,
-         wxDefaultPosition, wxSize(130, 700));
+         wxDefaultPosition, wxSize(130,700));
    m_clip_view->SetDataManager(&m_data_mgr);
 
    //adjust view
@@ -284,6 +311,8 @@ m_free_version(true)
    m_vrv_list[0]->SetRulerTimeDep(m_setting_dlg->GetRulerTimeDep());
    m_time_id = m_setting_dlg->GetTimeId();
    m_data_mgr.SetOverrideVox(m_setting_dlg->GetOverrideVox());
+	m_data_mgr.SetPvxmlFlipX(m_setting_dlg->GetPvxmlFlipX());
+	m_data_mgr.SetPvxmlFlipY(m_setting_dlg->GetPvxmlFlipY());
    VolumeRenderer::set_soft_threshold(m_setting_dlg->GetSoftThreshold());
    MultiVolumeRenderer::set_soft_threshold(m_setting_dlg->GetSoftThreshold());
    TreeLayer::SetSoftThreshsold(m_setting_dlg->GetSoftThreshold());
@@ -305,7 +334,7 @@ m_free_version(true)
    m_colocalization_dlg = new ColocalizationDlg(this, this);
 
    //recorder dialog
-   m_recorder_dlg = new RecorderDlg(this, this);
+   //m_recorder_dlg = new RecorderDlg(this, this);
 
    //measure dialog
    m_measure_dlg = new MeasureDlg(this, this);
@@ -355,16 +384,16 @@ m_free_version(true)
 #endif
    m_aui_mgr.AddPane(m_prop_panel, wxAuiPaneInfo().
          Name("m_prop_panel").Caption(UITEXT_PROPERTIES).
-         Bottom().CloseButton(true).MinSize(wxSize(300, 150)).
-         FloatingSize(wxSize(1100, 150)).Layer(2));
+         Bottom().CloseButton(true).MinSize(wxSize(300, 130)).
+         FloatingSize(wxSize(1100, 130)).Layer(2));
    m_aui_mgr.AddPane(m_adjust_view, wxAuiPaneInfo().
          Name("m_adjust_view").Caption(UITEXT_ADJUST).
          Left().CloseButton(true).MinSize(wxSize(110, 700)).
          FloatingSize(wxSize(110, 700)).Layer(1));
    m_aui_mgr.AddPane(m_clip_view, wxAuiPaneInfo().
          Name("m_clip_view").Caption(UITEXT_CLIPPING).
-         Right().CloseButton(true).MinSize(wxSize(100, 700)).
-         FloatingSize(wxSize(100, 700)).Layer(1));
+         Right().CloseButton(true).MinSize(wxSize(130, 700)).
+         FloatingSize(wxSize(130, 700)).Layer(1));
    m_aui_mgr.AddPane(vrv, wxAuiPaneInfo().
          Name(vrv->GetName()).Caption(vrv->GetName()).
          Dockable(true).CloseButton(false).
@@ -403,11 +432,11 @@ m_free_version(true)
    m_aui_mgr.GetPane(m_colocalization_dlg).Float();
    m_aui_mgr.GetPane(m_colocalization_dlg).Hide();
    //recorder dialog
-   m_aui_mgr.AddPane(m_recorder_dlg, wxAuiPaneInfo().
+/*   m_aui_mgr.AddPane(m_recorder_dlg, wxAuiPaneInfo().
          Name("m_recorder_dlg").Caption("Recorder").
          Dockable(false).CloseButton(true));
    m_aui_mgr.GetPane(m_recorder_dlg).Float();
-   m_aui_mgr.GetPane(m_recorder_dlg).Hide();
+   m_aui_mgr.GetPane(m_recorder_dlg).Hide()*/;
    //measure dialog
    m_aui_mgr.AddPane(m_measure_dlg, wxAuiPaneInfo().
          Name("m_measure_dlg").Caption("Measurement").
@@ -416,7 +445,7 @@ m_free_version(true)
    m_aui_mgr.GetPane(m_measure_dlg).Hide();
    //trace dialog
    m_aui_mgr.AddPane(m_trace_dlg, wxAuiPaneInfo().
-         Name("m_trace_dlg").Caption("Traces").
+         Name("m_trace_dlg").Caption("Cell Tracking").
          Dockable(false).CloseButton(true));
    m_aui_mgr.GetPane(m_trace_dlg).Float();
    m_aui_mgr.GetPane(m_trace_dlg).Hide();
@@ -472,6 +501,102 @@ m_free_version(true)
    GetStatusBar()->SetStatusText(wxString(FLUORENDER_TITLE)+
                                  wxString(" started normally."));
 #endif // wxUSE_STATUSBAR
+
+   //main top menu
+   m_top_menu = new wxMenuBar;
+   m_top_file = new wxMenu;
+   m_top_tools = new wxMenu;
+   m_top_window = new wxMenu;
+   m_top_help = new wxMenu;
+   //file options
+   wxMenuItem *m = new wxMenuItem(m_top_file,ID_OpenVolume, wxT("Open &Volume"));
+   m->SetBitmap(wxGetBitmapFromMemory(icon_open_volume_mini));
+   m_top_file->Append(m);
+   m = new wxMenuItem(m_top_file,ID_OpenMesh, wxT("Open &Mesh"));
+   m->SetBitmap(wxGetBitmapFromMemory(icon_open_mesh_mini));
+   m_top_file->Append(m);
+   m = new wxMenuItem(m_top_file,ID_OpenProject, wxT("Open &Project"));
+   m->SetBitmap(wxGetBitmapFromMemory(icon_open_project_mini));
+   m_top_file->Append(m);
+   m = new wxMenuItem(m_top_file,ID_SaveProject, wxT("&Save Project"));
+   m->SetBitmap(wxGetBitmapFromMemory(icon_save_project_mini));
+   m_top_file->Append(m);
+   m_top_file->Append(wxID_SEPARATOR);
+   wxMenuItem *quit = new wxMenuItem(m_top_file, wxID_EXIT);
+   quit->SetBitmap(wxArtProvider::GetBitmap(wxART_QUIT));
+   m_top_file->Append(quit);
+   //tool options
+   m = new wxMenuItem(m_top_tools,ID_PaintTool, wxT("&Edit Paintbrush..."));
+   m->SetBitmap(wxGetBitmapFromMemory(icon_edit_mini));
+   m_top_tools->Append(m);
+   m = new wxMenuItem(m_top_tools,ID_NoiseCancelling, wxT("&Noise Reduction..."));
+   m_top_tools->Append(m);
+   m = new wxMenuItem(m_top_tools,ID_Counting, wxT("&Counting and Volume..."));
+   m_top_tools->Append(m);
+   m = new wxMenuItem(m_top_tools,ID_Measure, wxT("&Measurement Tool..."));
+   m_top_tools->Append(m);
+   m = new wxMenuItem(m_top_tools,ID_Trace, wxT("&Trace..."));
+   m_top_tools->Append(m);
+   m = new wxMenuItem(m_top_tools,ID_Colocalization, wxT("Colocalization &Analysis..."));
+   m_top_tools->Append(m);
+   //m = new wxMenuItem(m_top_tools,ID_Recorder, wxT("&Recorder..."));
+   //m->SetBitmap(wxGetBitmapFromMemory(icon_recorder_mini));
+   //m_top_tools->Append(m);
+   m = new wxMenuItem(m_top_tools,ID_Convert, wxT("Con&vert..."));
+   m_top_tools->Append(m);
+   m_top_tools->Append(wxID_SEPARATOR);
+   m = new wxMenuItem(m_top_tools,ID_Settings, wxT("&Settings..."));
+   m->SetBitmap(wxGetBitmapFromMemory(icon_settings_mini));
+   m_top_tools->Append(m);
+   //window option
+   m = new wxMenuItem(m_top_window,ID_ShowHideToolbar, wxT("Show/Hide &Toolbar"), wxEmptyString, wxITEM_CHECK);
+   m_top_window->Append(m);
+   m_top_window->Check(ID_ShowHideToolbar, true);
+   m_top_window->Append(wxID_SEPARATOR);
+   m = new wxMenuItem(m_top_window,ID_ShowHideUI, wxT("Show/Hide &UI"));
+   m->SetBitmap(wxGetBitmapFromMemory(icon_show_hide_ui_mini));
+   m_top_window->Append(m);
+   m = new wxMenuItem(m_top_window,ID_UIListView, wxT("&Datasets"), wxEmptyString, wxITEM_CHECK);
+   m_top_window->Append(m);
+   m_top_window->Check(ID_UIListView, true);
+   m = new wxMenuItem(m_top_window,ID_UITreeView, wxT("&Workspace"), wxEmptyString, wxITEM_CHECK);
+   m_top_window->Append(m);
+   m_top_window->Check(ID_UITreeView, true);
+   m = new wxMenuItem(m_top_window,ID_UIMovieView, wxT("&Export"), wxEmptyString, wxITEM_CHECK);
+   m_top_window->Append(m);
+   m_top_window->Check(ID_UIMovieView, true);
+   m = new wxMenuItem(m_top_window,ID_UIAdjView, wxT("&Output Adjustments"), wxEmptyString, wxITEM_CHECK);
+   m_top_window->Append(m);
+   m_top_window->Check(ID_UIAdjView, true);
+   m = new wxMenuItem(m_top_window,ID_UIClipView, wxT("&Clipping Planes"), wxEmptyString, wxITEM_CHECK);
+   m_top_window->Append(m);
+   m_top_window->Check(ID_UIClipView, true);
+   m = new wxMenuItem(m_top_window,ID_UIPropView, wxT("&Properties"), wxEmptyString, wxITEM_CHECK);
+   m_top_window->Append(m);
+   m_top_window->Check(ID_UIPropView, true);
+   m_top_window->Append(wxID_SEPARATOR);
+   m = new wxMenuItem(m_top_window,ID_ViewNew, wxT("&New View"));
+   m->SetBitmap(wxGetBitmapFromMemory(icon_new_view_mini));
+   m_top_window->Append(m);
+   //help menu
+   m = new wxMenuItem(m_top_help,ID_CheckUpdates, wxT("&Check for Updates"));
+   m->SetBitmap(wxGetBitmapFromMemory(icon_check_updates_mini));
+   m_top_help->Append(m);
+   m = new wxMenuItem(m_top_help,ID_Twitter, wxT("&Twitter"));
+   m->SetBitmap(wxGetBitmapFromMemory(icon_twitter_mini));
+   m_top_help->Append(m);
+   m = new wxMenuItem(m_top_help,ID_Facebook, wxT("&Facebook"));
+   m->SetBitmap(wxGetBitmapFromMemory(icon_facebook_mini));
+   m_top_help->Append(m);
+   m = new wxMenuItem(m_top_help,ID_Info, wxT("&About FluoRender..."));
+   m->SetBitmap(wxGetBitmapFromMemory(icon_about_mini));
+   m_top_help->Append(m);
+   //add the menus
+   m_top_menu->Append(m_top_file,wxT("&File"));
+   m_top_menu->Append(m_top_tools,wxT("&Tools"));
+   m_top_menu->Append(m_top_window,wxT("&Windows"));
+   m_top_menu->Append(m_top_help,wxT("&Help"));
+   SetMenuBar(m_top_menu);
 }
 
 VRenderFrame::~VRenderFrame()
@@ -833,8 +958,10 @@ void VRenderFrame::LoadVolumes(wxArrayString files, VRenderView* view)
                vrv->AddVolumeData(vd);
                vd_sel = vd;
 
-               if (vd->GetReader() && vd->GetReader()->GetTimeNum()>1)
+               if (vd->GetReader() && vd->GetReader()->GetTimeNum()>1){
+				  vrv->m_glview->m_tseq_cur_num = vd->GetReader()->GetCurTime();
                   enable_4d = true;
+				}
             }
          }
       }
@@ -965,13 +1092,9 @@ void VRenderFrame::OnOrganize(wxCommandEvent& WXUNUSED(event))
    int view_num = m_vrv_list.size();
    if (view_num>1)
    {
-      //int col_num = ceil(sqrt(double(view_num)));
-      //int row_num = ceil(double(view_num)/double(col_num));
       for (int i=0 ; i<view_num ; i++)
       {
          m_aui_mgr.GetPane(m_vrv_list[i]->GetName()).Float();
-         //BestSize(int(double(w)/double(col_num)),
-         //int(double(h)/double(row_num)));
       }
       m_aui_mgr.Update();
    }
@@ -3313,17 +3436,17 @@ void VRenderFrame::OpenProject(wxString& filename)
             if (fconfig.Read("draw_camctr", &bVal))
             {
                vrv->m_glview->m_draw_camctr = bVal;
-               vrv->m_cam_ctr_chk->SetValue(bVal);
+               vrv->m_options_toolbar->ToggleTool(VRenderView::ID_CamCtrChk,bVal);
             }
             if (fconfig.Read("draw_fps", &bVal))
             {
                vrv->m_glview->m_draw_info = bVal;
-               vrv->m_fps_chk->SetValue(bVal);
+               vrv->m_options_toolbar->ToggleTool(VRenderView::ID_FpsChk,bVal);
             }
             if (fconfig.Read("draw_legend", &bVal))
             {
                vrv->m_glview->m_draw_legend = bVal;
-               vrv->m_legend_chk->SetValue(bVal);
+               vrv->m_options_toolbar->ToggleTool(VRenderView::ID_LegendChk,bVal);
             }
 
             //camera
@@ -4070,6 +4193,18 @@ void VRenderFrame::OnTwitter(wxCommandEvent& WXUNUSED(event))
 void VRenderFrame::OnShowHideUI(wxCommandEvent& WXUNUSED(event))
 {
    ToggleAllTools();
+}
+
+void VRenderFrame::OnShowHideToolbar(wxCommandEvent& WXUNUSED(event))
+{
+   if (m_aui_mgr.GetPane(m_main_tb).IsShown()) {
+      m_aui_mgr.GetPane(m_main_tb).Hide();
+	  m_top_window->Check(ID_ShowHideToolbar,false);
+   } else {
+      m_aui_mgr.GetPane(m_main_tb).Show();
+	  m_top_window->Check(ID_ShowHideToolbar,true);
+   }
+   m_aui_mgr.Update();
 }
 
 void VRenderFrame::OnShowHideView(wxCommandEvent &event)

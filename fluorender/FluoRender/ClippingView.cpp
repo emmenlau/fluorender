@@ -2,9 +2,16 @@
 #include "VRenderFrame.h"
 #include "compatibility.h"
 #include <wx/valnum.h>
+#include "png_resource.h"
+#include "img/link.h"
+#include "img/unlink.h"
+#include "img/refresh.h"
+#include "img/align.h"
+#include "img/link_text.h"
+#include "img/unlink_text.h"
 
 BEGIN_EVENT_TABLE(ClippingView, wxPanel)
-	EVT_CHECKBOX(ID_LinkChannelsChk, ClippingView::OnLinkChannelsCheck)
+	EVT_TOOL(ID_LinkChannelsChk, ClippingView::OnLinkChannelsCheck)
 	EVT_BUTTON(ID_SetZeroBtn, ClippingView::OnSetZeroBtn)
 	EVT_BUTTON(ID_RotResetBtn, ClippingView::OnRotResetBtn)
 	EVT_BUTTON(ID_ClipResetBtn, ClippingView::OnClipResetBtn)
@@ -25,9 +32,9 @@ BEGIN_EVENT_TABLE(ClippingView, wxPanel)
 
 	EVT_IDLE(ClippingView::OnIdle)
 
-	EVT_CHECKBOX(ID_LinkXChk, ClippingView::OnLinkXCheck)
-	EVT_CHECKBOX(ID_LinkYChk, ClippingView::OnLinkYCheck)
-	EVT_CHECKBOX(ID_LinkZChk, ClippingView::OnLinkZCheck)
+	EVT_TOOL(ID_LinkXChk, ClippingView::OnLinkXCheck)
+	EVT_TOOL(ID_LinkYChk, ClippingView::OnLinkYCheck)
+	EVT_TOOL(ID_LinkZChk, ClippingView::OnLinkZCheck)
 
 	EVT_COMMAND_SCROLL(ID_XRotSldr, ClippingView::OnXRotChange)
 	EVT_COMMAND_SCROLL(ID_YRotSldr, ClippingView::OnYRotChange)
@@ -75,218 +82,116 @@ m_link_z(false)
 
 	wxStaticText *st = 0;
 
-	//sync channels
+	//sync channels 1
 	wxBoxSizer* sizer_1 = new wxBoxSizer(wxHORIZONTAL);
-	m_link_channels = new wxCheckBox(this, ID_LinkChannelsChk, "Sync All Chan.");
-	m_link_channels->SetValue(false);
+	m_link_channels = new wxToolBar(this,wxID_ANY);
+	m_link_channels->AddCheckTool(ID_LinkChannelsChk, "Sync All Chan.",
+		wxGetBitmapFromMemory(unlink_text), wxNullBitmap,
+		"Link all data channels to this cropping",
+		"Link all data channels to this cropping");
+	m_link_channels->ToggleTool(ID_LinkChannelsChk,false);
+	m_link_channels->Realize();
 	sizer_1->Add(5, 5, 0);
 	sizer_1->Add(m_link_channels, 0, wxALIGN_CENTER, 0);
 
-	//rotations
-	//set sero rotation for clipping planes
-	wxBoxSizer* sizer_2 = new wxBoxSizer(wxHORIZONTAL);
-	m_set_zero_btn = new wxButton(this, ID_SetZeroBtn, "Align to View",
-		wxDefaultPosition, wxSize(100, 22));
-	sizer_2->Add(5, 5, 0);
-	sizer_2->Add(m_set_zero_btn, 0, wxALIGN_CENTER);
-
-	//reset rotations
-	wxBoxSizer* sizer_3 = new wxBoxSizer(wxHORIZONTAL);
-	m_rot_reset_btn = new wxButton(this, ID_RotResetBtn, "Reset to 0",
-		wxDefaultPosition, wxSize(85, 22));
-	sizer_3->Add(5, 5, 0);
-	sizer_3->Add(m_rot_reset_btn, 0, wxALIGN_CENTER);
-
-	//reset clipping
-	wxBoxSizer* sizer_4 = new wxBoxSizer(wxHORIZONTAL);
-	m_clip_reset_btn = new wxButton(this, ID_ClipResetBtn, "Reset Clips",
-		wxDefaultPosition, wxSize(85, 22));
-	sizer_4->Add(5, 5, 0);
-	sizer_4->Add(m_clip_reset_btn, 0, wxALIGN_CENTER);
-
-	//clip buttons
-	wxBoxSizer* sizer_5 = new wxBoxSizer(wxHORIZONTAL);
-	m_yz_clip_btn = new wxButton(this, ID_YZClipBtn, "YZ",
-		wxDefaultPosition, wxSize(34, 22));
-	m_xz_clip_btn = new wxButton(this, ID_XZClipBtn, "XZ",
-		wxDefaultPosition, wxSize(34, 22));
-	m_xy_clip_btn = new wxButton(this, ID_XYClipBtn, "XY",
-		wxDefaultPosition, wxSize(34, 22));
-	sizer_5->Add(m_yz_clip_btn, 1, wxEXPAND|wxALIGN_CENTER);
-	sizer_5->Add(m_xz_clip_btn, 1, wxEXPAND|wxALIGN_CENTER);
-	sizer_5->Add(m_xy_clip_btn, 1, wxEXPAND|wxALIGN_CENTER);
-
-	//clip distance
-	wxBoxSizer* sizer_6 = new wxBoxSizer(wxHORIZONTAL);
-	m_yz_dist_text = new wxTextCtrl(this, ID_YZDistText, "1",
-		wxDefaultPosition, wxSize(34, 22), 0, vald_int);
-	m_xz_dist_text = new wxTextCtrl(this, ID_XZDistText, "1",
-		wxDefaultPosition, wxSize(34, 22), 0, vald_int);
-	m_xy_dist_text = new wxTextCtrl(this, ID_XYDistText, "1",
-		wxDefaultPosition, wxSize(34, 22), 0, vald_int);
-	sizer_6->Add(m_yz_dist_text, 1, wxEXPAND|wxALIGN_CENTER);
-	sizer_6->Add(m_xz_dist_text, 1, wxEXPAND|wxALIGN_CENTER);
-	sizer_6->Add(m_xy_dist_text, 1, wxEXPAND|wxALIGN_CENTER);
-
-	//sliders for rotating clipping planes
-	//x
-	wxBoxSizer* sizer_rx = new wxBoxSizer(wxVERTICAL);
-	st = new wxStaticText(this, 0, "X");
-	m_x_rot_sldr = new wxSlider(this, ID_XRotSldr, 0, -180, 180,
-		wxDefaultPosition, wxDefaultSize, wxSL_VERTICAL|wxSL_INVERSE);
-	m_x_rot_text = new wxTextCtrl(this, ID_XRotText, "0.0",
-		wxDefaultPosition, wxSize(34, 20), 0, vald_fp1);
-	m_x_rot_spin = new wxSpinButton(this, ID_XRotSpin,
-		wxDefaultPosition, wxSize(30, 20), wxSP_VERTICAL);
-	sizer_rx->Add(5, 5, 0);
-	sizer_rx->Add(m_x_rot_text, 0, wxALIGN_CENTER, 0);
-	sizer_rx->Add(st, 0, wxALIGN_CENTER, 0);
-	sizer_rx->Add(5, 5, 0);
-	sizer_rx->Add(m_x_rot_spin, 0, wxALIGN_CENTER, 0);
-	sizer_rx->Add(m_x_rot_sldr, 1, wxEXPAND|wxALIGN_CENTER, 0);
-	//y
-	wxBoxSizer* sizer_ry = new wxBoxSizer(wxVERTICAL);
-	st = new wxStaticText(this, 0, "Y");
-	m_y_rot_sldr = new wxSlider(this, ID_YRotSldr, 0, -180, 180,
-		wxDefaultPosition, wxDefaultSize, wxSL_VERTICAL|wxSL_INVERSE);
-	m_y_rot_text = new wxTextCtrl(this, ID_YRotText, "0.0",
-		wxDefaultPosition, wxSize(34, 20), 0, vald_fp1);
-	m_y_rot_spin = new wxSpinButton(this, ID_YRotSpin,
-		wxDefaultPosition, wxSize(30, 20), wxSP_VERTICAL);
-	sizer_ry->Add(5, 5, 0);
-	sizer_ry->Add(m_y_rot_text, 0, wxALIGN_CENTER, 0);
-	sizer_ry->Add(st, 0, wxALIGN_CENTER, 0);
-	sizer_ry->Add(5, 5, 0);
-	sizer_ry->Add(m_y_rot_spin, 0, wxALIGN_CENTER, 0);
-	sizer_ry->Add(m_y_rot_sldr, 1, wxEXPAND|wxALIGN_CENTER, 0);
-	//z
-	wxBoxSizer* sizer_rz = new wxBoxSizer(wxVERTICAL);
-	st = new wxStaticText(this, 0, "Z");
-	m_z_rot_sldr = new wxSlider(this, ID_ZRotSldr, 0, -180, 180,
-		wxDefaultPosition, wxDefaultSize, wxSL_VERTICAL|wxSL_INVERSE);
-	m_z_rot_text = new wxTextCtrl(this, ID_ZRotText, "0.0",
-		wxDefaultPosition, wxSize(34, 20), 0, vald_fp1);
-	m_z_rot_spin = new wxSpinButton(this, ID_ZRotSpin,
-		wxDefaultPosition, wxSize(30, 20), wxSP_VERTICAL);
-	sizer_rz->Add(5, 5, 0);
-	sizer_rz->Add(m_z_rot_text, 0, wxALIGN_CENTER, 0);
-	sizer_rz->Add(st, 0, wxALIGN_CENTER, 0);
-	sizer_rz->Add(5, 5, 0);
-	sizer_rz->Add(m_z_rot_spin, 0, wxALIGN_CENTER, 0);
-	sizer_rz->Add(m_z_rot_sldr, 1, wxEXPAND|wxALIGN_CENTER, 0);
-
 	wxStaticText* st_cb = 0;
+
 	//sliders for clipping planes
-	//x1
+	//x
 	wxBoxSizer* sizer_cx = new wxBoxSizer(wxVERTICAL);
-	st = new wxStaticText(this, 0, "X1");
-	m_x1_clip_sldr = new wxSlider(this, ID_X1ClipSldr, 0, 0, 512,
-		wxDefaultPosition, wxDefaultSize, wxSL_VERTICAL);
+	m_xpanel = new wxPanel(this);
+	st = new wxStaticText(this, 0, "X");
+	m_x1_clip_sldr = new wxSlider(m_xpanel, ID_X1ClipSldr, 0, 0, 512,
+		wxPoint(0,0), wxSize(20,-1), wxSL_VERTICAL);
+	m_xBar = new wxStaticText(m_xpanel, 0, "",
+		wxPoint(20,10), wxSize(3, m_x1_clip_sldr->GetSize().GetHeight() - 20));
+	m_xBar->SetBackgroundColour(wxColor(255, 128, 128));
+	m_x2_clip_sldr = new wxSlider(m_xpanel, ID_X2ClipSldr, 512, 0, 512,
+		wxPoint(23,0), wxSize(20,-1), wxSL_VERTICAL);
 	m_x1_clip_text = new wxTextCtrl(this, ID_X1ClipText, "0",
 		wxDefaultPosition, wxSize(34, 20), 0, vald_int);
 	st_cb = new wxStaticText(this, 0, "",
 		wxDefaultPosition, wxSize(5, 5));
 	st_cb->SetBackgroundColour(wxColor(255, 128, 128));
-	sizer_cx->Add(5, 5, 0);
-	sizer_cx->Add(m_x1_clip_sldr, 1, wxEXPAND|wxALIGN_CENTER, 0);
-	sizer_cx->Add(st_cb, 0, wxEXPAND);
-	sizer_cx->Add(st, 0, wxALIGN_CENTER, 0);
-	sizer_cx->Add(m_x1_clip_text, 0, wxALIGN_CENTER, 0);
-	//link x
-	m_link_x_chk = new wxCheckBox(this, ID_LinkXChk, "");
-	m_link_x_chk->SetValue(false);
-	st = new wxStaticText(this, 0, "Link");
-	sizer_cx->Add(5, 10, 0);
-	sizer_cx->Add(m_link_x_chk, 0, wxALIGN_CENTER, 0);
-	sizer_cx->Add(st, 0, wxALIGN_CENTER, 0);
-	//x2
-	st = new wxStaticText(this, 0, "X2");
-	m_x2_clip_sldr = new wxSlider(this, ID_X2ClipSldr, 512, 0, 512,
-		wxDefaultPosition, wxDefaultSize, wxSL_VERTICAL);
 	m_x2_clip_text = new wxTextCtrl(this, ID_X2ClipText, "512",
 		wxDefaultPosition, wxSize(34, 20), 0, vald_int);
+	//add the items
+	sizer_cx->Add(5, 5, 0);
+	sizer_cx->Add(st, 0, wxALIGN_CENTER, 0);
+	sizer_cx->Add(m_x1_clip_text, 0, wxALIGN_CENTER, 0);
+	sizer_cx->Add(5, 5, 0);
+	sizer_cx->Add(st_cb, 0, wxEXPAND);
+	sizer_cx->Add(m_xpanel, 1, wxALIGN_CENTER, 0);
 	st_cb = new wxStaticText(this, 0, "",
 		wxDefaultPosition, wxSize(5, 5));
 	st_cb->SetBackgroundColour(wxColor(255, 128, 255));
-	sizer_cx->Add(5, 10, 0);
-	sizer_cx->Add(m_x2_clip_text, 0, wxALIGN_CENTER, 0);
-	sizer_cx->Add(st, 0, wxALIGN_CENTER, 0);
 	sizer_cx->Add(st_cb, 0, wxEXPAND);
-	sizer_cx->Add(m_x2_clip_sldr, 1, wxEXPAND|wxALIGN_CENTER, 0);
+	sizer_cx->Add(5, 5, 0);
+	sizer_cx->Add(m_x2_clip_text, 0, wxALIGN_CENTER, 0);
 
-	//y1
+	//y
 	wxBoxSizer* sizer_cy = new wxBoxSizer(wxVERTICAL);
-	st = new wxStaticText(this, 0, "Y1");
-	m_y1_clip_sldr = new wxSlider(this, ID_Y1ClipSldr, 0, 0, 512,
-		wxDefaultPosition, wxDefaultSize, wxSL_VERTICAL);
+	wxPanel * ypanel = new wxPanel(this);
+	st = new wxStaticText(this, 0, "Y");
+	m_y1_clip_sldr = new wxSlider(ypanel, ID_Y1ClipSldr, 0, 0, 512,
+		wxPoint(0,0),  wxSize(20,-1), wxSL_VERTICAL);
+	m_yBar = new wxStaticText(ypanel, 0, "",
+		wxPoint(20,10), wxSize(3, m_x1_clip_sldr->GetSize().GetHeight() - 20));
+	m_yBar->SetBackgroundColour(wxColor(128, 255, 128));
+	m_y2_clip_sldr = new wxSlider(ypanel, ID_Y2ClipSldr, 512, 0, 512,
+		wxPoint(23,0),  wxSize(20,-1), wxSL_VERTICAL);
 	m_y1_clip_text = new wxTextCtrl(this, ID_Y1ClipText, "0",
 		wxDefaultPosition, wxSize(34, 20), 0, vald_int);
 	st_cb = new wxStaticText(this, 0, "",
 		wxDefaultPosition, wxSize(5, 5));
 	st_cb->SetBackgroundColour(wxColor(128, 255, 128));
-	sizer_cy->Add(5, 5, 0);
-	sizer_cy->Add(m_y1_clip_sldr, 1, wxEXPAND|wxALIGN_CENTER, 0);
-	sizer_cy->Add(st_cb, 0, wxEXPAND);
-	sizer_cy->Add(st, 0, wxALIGN_CENTER, 0);
-	sizer_cy->Add(m_y1_clip_text, 0, wxALIGN_CENTER, 0);
-	//link y
-	m_link_y_chk = new wxCheckBox(this, ID_LinkYChk, "");
-	m_link_y_chk->SetValue(false);
-	st = new wxStaticText(this, 0, "Link");
-	sizer_cy->Add(5, 10, 0);
-	sizer_cy->Add(m_link_y_chk, 0, wxALIGN_CENTER, 0);
-	sizer_cy->Add(st, 0, wxALIGN_CENTER, 0);
-	//y2
-	m_y2_clip_sldr = new wxSlider(this, ID_Y2ClipSldr, 512, 0, 512,
-		wxDefaultPosition, wxDefaultSize, wxSL_VERTICAL);
-	st = new wxStaticText(this, 0, "Y2");
 	m_y2_clip_text = new wxTextCtrl(this, ID_Y2ClipText, "512",
 		wxDefaultPosition, wxSize(34, 20), 0, vald_int);
+	//add the items
+	sizer_cy->Add(5, 5, 0);
+	sizer_cy->Add(st, 0, wxALIGN_CENTER, 0);
+	sizer_cy->Add(m_y1_clip_text, 0, wxALIGN_CENTER, 0);
+	sizer_cy->Add(5, 5, 0);
+	sizer_cy->Add(st_cb, 0, wxEXPAND);
+	sizer_cy->Add(ypanel, 1, wxALIGN_CENTER, 0);
 	st_cb = new wxStaticText(this, 0, "",
 		wxDefaultPosition, wxSize(5, 5));
-	st_cb->SetBackgroundColour(wxColor(128, 255, 255));
-	sizer_cy->Add(5, 10, 0);
-	sizer_cy->Add(m_y2_clip_text, 0, wxALIGN_CENTER, 0);
-	sizer_cy->Add(st, 0, wxALIGN_CENTER, 0);
+	st_cb->SetBackgroundColour(wxColor(255, 255, 128));
 	sizer_cy->Add(st_cb, 0, wxEXPAND);
-	sizer_cy->Add(m_y2_clip_sldr, 1, wxEXPAND|wxALIGN_CENTER, 0);
+	sizer_cy->Add(5, 5, 0);
+	sizer_cy->Add(m_y2_clip_text, 0, wxALIGN_CENTER, 0);
 
-	//z1
+	//z
 	wxBoxSizer* sizer_cz = new wxBoxSizer(wxVERTICAL);
-	st = new wxStaticText(this, 0, "Z1");
-	m_z1_clip_sldr = new wxSlider(this, ID_Z1ClipSldr, 0, 0, 512,
-		wxDefaultPosition, wxDefaultSize, wxSL_VERTICAL);
+	wxPanel * zpanel = new wxPanel(this);
+	st = new wxStaticText(this, 0, "Z");
+	m_z1_clip_sldr = new wxSlider(zpanel, ID_Z1ClipSldr, 0, 0, 512,
+		wxPoint(0,0),  wxSize(20,-1), wxSL_VERTICAL);
+	m_zBar = new wxStaticText(zpanel, 0, "",
+		wxPoint(20,10), wxSize(3, m_x1_clip_sldr->GetSize().GetHeight() - 20));
+	m_zBar->SetBackgroundColour(wxColor(128, 128, 255));
+	m_z2_clip_sldr = new wxSlider(zpanel, ID_Z2ClipSldr, 512, 0, 512,
+		wxPoint(23,0),  wxSize(20,-1), wxSL_VERTICAL);
 	m_z1_clip_text = new wxTextCtrl(this, ID_Z1ClipText, "0",
 		wxDefaultPosition, wxSize(34, 20), 0, vald_int);
 	st_cb = new wxStaticText(this, 0, "",
 		wxDefaultPosition, wxSize(5, 5));
 	st_cb->SetBackgroundColour(wxColor(128, 128, 255));
-	sizer_cz->Add(5, 5, 0);
-	sizer_cz->Add(m_z1_clip_sldr, 1, wxEXPAND|wxALIGN_CENTER, 0);
-	sizer_cz->Add(st_cb, 0, wxEXPAND);
-	sizer_cz->Add(st, 0, wxALIGN_CENTER, 0);
-	sizer_cz->Add(m_z1_clip_text, 0, wxALIGN_CENTER, 0);
-	//link z
-	m_link_z_chk = new wxCheckBox(this, ID_LinkZChk, "");
-	m_link_z_chk->SetValue(false);
-	st = new wxStaticText(this, 0, "Link");
-	sizer_cz->Add(5, 10, 0);
-	sizer_cz->Add(m_link_z_chk, 0, wxALIGN_CENTER, 0);
-	sizer_cz->Add(st, 0, wxALIGN_CENTER, 0);
-	//z2
-	m_z2_clip_sldr = new wxSlider(this, ID_Z2ClipSldr, 512, 0, 512,
-		wxDefaultPosition, wxDefaultSize, wxSL_VERTICAL);
-	st = new wxStaticText(this, 0, "Z2");
 	m_z2_clip_text = new wxTextCtrl(this, ID_Z2ClipText, "512",
 		wxDefaultPosition, wxSize(34, 20), 0, vald_int);
+	//add the items
+	sizer_cz->Add(5, 5, 0);
+	sizer_cz->Add(st, 0, wxALIGN_CENTER, 0);
+	sizer_cz->Add(m_z1_clip_text, 0, wxALIGN_CENTER, 0);
+	sizer_cz->Add(5, 5, 0);
+	sizer_cz->Add(st_cb, 0, wxEXPAND);
+	sizer_cz->Add(zpanel, 1, wxALIGN_CENTER, 0);
 	st_cb = new wxStaticText(this, 0, "",
 		wxDefaultPosition, wxSize(5, 5));
-	st_cb->SetBackgroundColour(wxColor(255, 255, 128));
-	sizer_cz->Add(5, 10, 0);
-	sizer_cz->Add(m_z2_clip_text, 0, wxALIGN_CENTER, 0);
-	sizer_cz->Add(st, 0, wxALIGN_CENTER, 0);
+	st_cb->SetBackgroundColour(wxColor(128, 255, 255));
 	sizer_cz->Add(st_cb, 0, wxEXPAND);
-	sizer_cz->Add(m_z2_clip_sldr, 1, wxEXPAND|wxALIGN_CENTER, 0);
+	sizer_cz->Add(5, 5, 0);
+	sizer_cz->Add(m_z2_clip_text, 0, wxALIGN_CENTER, 0);
 
 	//link sliders
 	m_x1_clip_sldr->Connect(ID_X1ClipSldr, wxEVT_RIGHT_DOWN,
@@ -328,37 +233,172 @@ m_link_z(false)
 		wxKeyEventHandler(ClippingView::OnSliderKeyDown),
 		NULL, this);
 
-	//h1
-	wxBoxSizer *sizer_h1 = new wxBoxSizer(wxHORIZONTAL);
-	sizer_h1->Add(sizer_rx, 1, wxEXPAND);
-	sizer_h1->Add(sizer_ry, 1, wxEXPAND);
-	sizer_h1->Add(sizer_rz, 1, wxEXPAND);
+	//2
+	wxBoxSizer *sizer_2 = new wxBoxSizer(wxHORIZONTAL);
+	sizer_2->Add(sizer_cx, 1, wxEXPAND);
+	sizer_2->Add(sizer_cy, 1, wxEXPAND);
+	sizer_2->Add(sizer_cz, 1, wxEXPAND);
 
-	//h2
-	wxBoxSizer *sizer_h2 = new wxBoxSizer(wxHORIZONTAL);
-	sizer_h2->Add(sizer_cx, 1, wxEXPAND);
-	sizer_h2->Add(sizer_cy, 1, wxEXPAND);
-	sizer_h2->Add(sizer_cz, 1, wxEXPAND);
+	//3 -- link checkbox images
+	wxBoxSizer *sizer_3 = new wxBoxSizer(wxHORIZONTAL);
+	m_check_tb = new wxToolBar(this,wxID_ANY);
+	m_check_tb->AddCheckTool(ID_LinkXChk,"Lock X Planes",
+		wxGetBitmapFromMemory(unlink),
+		wxNullBitmap,"Lock X Planes");
+	m_check_tb->AddSeparator();
+	m_check_tb->AddSeparator();
+	m_check_tb->AddCheckTool(ID_LinkYChk,"Lock Y Planes",
+		wxGetBitmapFromMemory(unlink),
+		wxNullBitmap,"Lock Y Planes");
+	m_check_tb->AddSeparator();
+	m_check_tb->AddSeparator();
+	m_check_tb->AddCheckTool(ID_LinkZChk,"Lock Z Planes",
+		wxGetBitmapFromMemory(unlink),
+		wxNullBitmap,"Lock Z Planes");
+	m_check_tb->Realize();
+	sizer_3->Add(5,5,0);
+	sizer_3->Add(m_check_tb, 1, wxALIGN_TOP|wxSHRINK );
+
+	//clip buttons 4
+	wxBoxSizer* sizer_4 = new wxBoxSizer(wxHORIZONTAL);
+	m_yz_clip_btn = new wxButton(this, ID_YZClipBtn, "YZ",
+		wxDefaultPosition, wxSize(34, 22));
+	m_xz_clip_btn = new wxButton(this, ID_XZClipBtn, "XZ",
+		wxDefaultPosition, wxSize(34, 22));
+	m_xy_clip_btn = new wxButton(this, ID_XYClipBtn, "XY",
+		wxDefaultPosition, wxSize(34, 22));
+	sizer_4->Add(m_yz_clip_btn, 1, wxEXPAND|wxALIGN_CENTER);
+	sizer_4->AddSpacer(5);
+	sizer_4->Add(m_xz_clip_btn, 1, wxEXPAND|wxALIGN_CENTER);
+	sizer_4->AddSpacer(5);
+	sizer_4->Add(m_xy_clip_btn, 1, wxEXPAND|wxALIGN_CENTER);
+
+	//clip distance 5
+	wxBoxSizer* sizer_5 = new wxBoxSizer(wxHORIZONTAL);
+	m_yz_dist_text = new wxTextCtrl(this, ID_YZDistText, "1",
+		wxDefaultPosition, wxSize(34, 22), 0, vald_int);
+	m_xz_dist_text = new wxTextCtrl(this, ID_XZDistText, "1",
+		wxDefaultPosition, wxSize(34, 22), 0, vald_int);
+	m_xy_dist_text = new wxTextCtrl(this, ID_XYDistText, "1",
+		wxDefaultPosition, wxSize(34, 22), 0, vald_int);
+	sizer_5->Add(m_yz_dist_text, 1, wxEXPAND|wxALIGN_CENTER);
+	sizer_5->AddSpacer(5);
+	sizer_5->Add(m_xz_dist_text, 1, wxEXPAND|wxALIGN_CENTER);
+	sizer_5->AddSpacer(5);
+	sizer_5->Add(m_xy_dist_text, 1, wxEXPAND|wxALIGN_CENTER);
+	
+	//reset clipping 6
+	wxBoxSizer* sizer_6 = new wxBoxSizer(wxHORIZONTAL);
+#ifndef _DARWIN
+	m_clip_reset_btn = new wxButton(this, ID_ClipResetBtn, "Reset Clips",
+									wxDefaultPosition, wxSize(120, 22));
+#else
+	m_clip_reset_btn = new wxButton(this, ID_ClipResetBtn, "Reset Clips",
+									wxDefaultPosition, wxSize(125, 30));
+#endif
+	m_clip_reset_btn->SetBitmap(wxGetBitmapFromMemory(refresh));
+	sizer_6->Add(5, 5, 0);
+	sizer_6->Add(m_clip_reset_btn, 0, wxALIGN_CENTER);
+
+	//rotations
+	//set sero rotation for clipping planes 7
+	wxBoxSizer* sizer_7 = new wxBoxSizer(wxHORIZONTAL);
+#ifndef _DARWIN
+	m_set_zero_btn = new wxButton(this, ID_SetZeroBtn, "Align to View",
+								  wxDefaultPosition, wxSize(120, 22));
+#else
+	m_set_zero_btn = new wxButton(this, ID_SetZeroBtn, "Align to View",
+								  wxDefaultPosition, wxSize(125, 30));
+#endif
+	m_set_zero_btn->SetBitmap(wxGetBitmapFromMemory(align));
+	sizer_7->Add(5, 5, 0);
+	sizer_7->Add(m_set_zero_btn, 0, wxALIGN_CENTER);
+
+	//reset rotations 8
+	wxBoxSizer* sizer_8 = new wxBoxSizer(wxHORIZONTAL);
+#ifndef _DARWIN
+	m_rot_reset_btn = new wxButton(this, ID_RotResetBtn, "Reset to 0",
+								   wxDefaultPosition, wxSize(120, 22));
+#else
+	m_rot_reset_btn = new wxButton(this, ID_RotResetBtn, "Reset to 0",
+								   wxDefaultPosition, wxSize(125, 30));
+#endif
+	m_rot_reset_btn->SetBitmap(wxGetBitmapFromMemory(refresh));
+	sizer_8->Add(5, 5, 0);
+	sizer_8->Add(m_rot_reset_btn, 0, wxALIGN_CENTER);
+
+	//sliders for rotating clipping planes 
+	//x
+	wxBoxSizer* sizer_rx = new wxBoxSizer(wxVERTICAL);
+	st = new wxStaticText(this, 0, "X");
+	m_x_rot_sldr = new wxSlider(this, ID_XRotSldr, 0, -180, 180,
+		wxDefaultPosition, wxDefaultSize, wxSL_VERTICAL|wxSL_INVERSE);
+	m_x_rot_text = new wxTextCtrl(this, ID_XRotText, "0.0",
+		wxDefaultPosition, wxSize(34, 20), 0, vald_fp1);
+	m_x_rot_spin = new wxSpinButton(this, ID_XRotSpin,
+		wxDefaultPosition, wxSize(30, 20), wxSP_VERTICAL);
+	sizer_rx->Add(5, 5, 0);
+	sizer_rx->Add(m_x_rot_text, 0, wxALIGN_CENTER, 0);
+	sizer_rx->Add(st, 0, wxALIGN_CENTER, 0);
+	sizer_rx->Add(5, 5, 0);
+	sizer_rx->Add(m_x_rot_spin, 0, wxALIGN_CENTER, 0);
+	sizer_rx->Add(m_x_rot_sldr, 1, wxALIGN_CENTER, 0);
+	//y
+	wxBoxSizer* sizer_ry = new wxBoxSizer(wxVERTICAL);
+	st = new wxStaticText(this, 0, "Y");
+	m_y_rot_sldr = new wxSlider(this, ID_YRotSldr, 0, -180, 180,
+		wxDefaultPosition, wxDefaultSize, wxSL_VERTICAL|wxSL_INVERSE);
+	m_y_rot_text = new wxTextCtrl(this, ID_YRotText, "0.0",
+		wxDefaultPosition, wxSize(34, 20), 0, vald_fp1);
+	m_y_rot_spin = new wxSpinButton(this, ID_YRotSpin,
+		wxDefaultPosition, wxSize(30, 20), wxSP_VERTICAL);
+	sizer_ry->Add(5, 5, 0);
+	sizer_ry->Add(m_y_rot_text, 0, wxALIGN_CENTER, 0);
+	sizer_ry->Add(st, 0, wxALIGN_CENTER, 0);
+	sizer_ry->Add(5, 5, 0);
+	sizer_ry->Add(m_y_rot_spin, 0, wxALIGN_CENTER, 0);
+	sizer_ry->Add(m_y_rot_sldr, 1, wxALIGN_CENTER, 0);
+	//z
+	wxBoxSizer* sizer_rz = new wxBoxSizer(wxVERTICAL);
+	st = new wxStaticText(this, 0, "Z");
+	m_z_rot_sldr = new wxSlider(this, ID_ZRotSldr, 0, -180, 180,
+		wxDefaultPosition, wxDefaultSize, wxSL_VERTICAL|wxSL_INVERSE);
+	m_z_rot_text = new wxTextCtrl(this, ID_ZRotText, "0.0",
+		wxDefaultPosition, wxSize(34, 20), 0, vald_fp1);
+	m_z_rot_spin = new wxSpinButton(this, ID_ZRotSpin,
+		wxDefaultPosition, wxSize(30, 20), wxSP_VERTICAL);
+	sizer_rz->Add(5, 5, 0);
+	sizer_rz->Add(m_z_rot_text, 0, wxALIGN_CENTER, 0);
+	sizer_rz->Add(st, 0, wxALIGN_CENTER, 0);
+	sizer_rz->Add(5, 5, 0);
+	sizer_rz->Add(m_z_rot_spin, 0, wxALIGN_CENTER, 0);
+	sizer_rz->Add(m_z_rot_sldr, 1, wxALIGN_CENTER, 0);
+	
+
+	//sizer 9
+	wxBoxSizer *sizer_9 = new wxBoxSizer(wxHORIZONTAL);
+	sizer_9->Add(sizer_rx, 1, wxEXPAND);
+	sizer_9->Add(sizer_ry, 1, wxEXPAND);
+	sizer_9->Add(sizer_rz, 1, wxEXPAND);
 
 	//v
 	wxBoxSizer *sizer_v = new wxBoxSizer(wxVERTICAL);
-	st = new wxStaticText(this, 0, "Clippings:");
-	sizer_v->Add(st, 0, wxALIGN_CENTER);
 	sizer_v->Add(10, 10, 0);
-	sizer_v->Add(sizer_1, 0, wxALIGN_LEFT);
+	sizer_v->Add(sizer_1, 0, wxALIGN_CENTER);
 	sizer_v->Add(5, 5, 0);
-	sizer_v->Add(sizer_h2, 2, wxEXPAND);
+	sizer_v->Add(sizer_2, 1, wxEXPAND);
+	sizer_v->Add(5, 5, 0);
+	sizer_v->Add(sizer_3, 0, wxALIGN_CENTER|wxEXPAND);
+	sizer_v->AddSpacer(5);
+	sizer_v->Add(new wxStaticText(this,0,
+		"Set Clip Slab Width"), 0, wxALIGN_CENTER);
 	sizer_v->Add(5, 5, 0);
 	sizer_v->Add(sizer_4, 0, wxALIGN_CENTER);
 	sizer_v->Add(5, 5, 0);
 	sizer_v->Add(sizer_5, 0, wxALIGN_CENTER);
 	sizer_v->Add(5, 5, 0);
 	sizer_v->Add(sizer_6, 0, wxALIGN_CENTER);
-	if (((VRenderFrame*)m_frame)->GetFreeVersion())
-	{
-		sizer_v->Hide(sizer_5);
-		sizer_v->Hide(sizer_6);
-	}
+	sizer_v->Add(5, 5, 0);
 
 	st = new wxStaticText(this, 0, "", wxDefaultPosition, wxSize(5, 5));
 	st->SetBackgroundColour(wxColor(100, 100, 100));
@@ -369,10 +409,10 @@ m_link_z(false)
 	sizer_v->Add(10, 10, 0);
 	sizer_v->Add(st, 0, wxALIGN_CENTER);
 	sizer_v->Add(10, 10, 0);
-	sizer_v->Add(sizer_2, 0, wxALIGN_CENTER);
-	sizer_v->Add(sizer_3, 0, wxALIGN_CENTER);
+	sizer_v->Add(sizer_7, 0, wxALIGN_CENTER);
+	sizer_v->Add(sizer_8, 0, wxALIGN_CENTER);
 	sizer_v->Add(10, 10, 0);
-	sizer_v->Add(sizer_h1, 1, wxEXPAND);
+	sizer_v->Add(sizer_9, 1, wxEXPAND);
 
 	SetSizer(sizer_v);
 	Layout();
@@ -384,6 +424,17 @@ ClippingView::~ClippingView()
 {
 }
 
+void ClippingView::SetChannLink(bool chann)
+{
+	m_link_channels->ToggleTool(ID_LinkChannelsChk,chann);
+	if(chann)
+		m_link_channels->SetToolNormalBitmap(ID_LinkChannelsChk,
+			wxGetBitmapFromMemory(link_text));
+	else
+		m_link_channels->SetToolNormalBitmap(ID_LinkChannelsChk,
+			wxGetBitmapFromMemory(unlink_text));
+
+}
 int ClippingView::GetSelType()
 {
 	return m_sel_type;
@@ -531,6 +582,8 @@ void ClippingView::GetSettings()
 	plane->get_copy(abcd);
 	val = fabs(abcd[3]*resx)+0.499;
 	m_x1_clip_sldr->SetValue(val);
+	double percent = (double)val/(double)m_x1_clip_sldr->GetMax();
+	int barsize = (m_x1_clip_sldr->GetSize().GetHeight() - 20);
 	str = wxString::Format("%d", val);
 	m_x1_clip_text->ChangeValue(str);
 	//x2
@@ -538,6 +591,9 @@ void ClippingView::GetSettings()
 	plane->get_copy(abcd);
 	val = fabs(abcd[3]*resx)+0.499;
 	m_x2_clip_sldr->SetValue(val);
+	m_xBar->SetPosition(wxPoint(20,10+percent*barsize));
+	m_xBar->SetSize(wxSize(3,barsize*((double)
+		(val - m_x1_clip_sldr->GetValue())/(double)m_x1_clip_sldr->GetMax())));
 	str = wxString::Format("%d", val);
 	m_x2_clip_text->ChangeValue(str);
 	//y1
@@ -545,6 +601,8 @@ void ClippingView::GetSettings()
 	plane->get_copy(abcd);
 	val = fabs(abcd[3]*resy)+0.499;
 	m_y1_clip_sldr->SetValue(val);
+	percent = (double)val/(double)m_y1_clip_sldr->GetMax();
+	barsize = (m_y1_clip_sldr->GetSize().GetHeight() - 20);
 	str = wxString::Format("%d", val);
 	m_y1_clip_text->ChangeValue(str);
 	//y2
@@ -552,6 +610,9 @@ void ClippingView::GetSettings()
 	plane->get_copy(abcd);
 	val = fabs(abcd[3]*resy)+0.499;
 	m_y2_clip_sldr->SetValue(val);
+	m_yBar->SetPosition(wxPoint(20,10+percent*barsize));
+	m_yBar->SetSize(wxSize(3,barsize*((double)
+		(val - m_y1_clip_sldr->GetValue())/(double)m_y1_clip_sldr->GetMax())));
 	str = wxString::Format("%d", val);
 	m_y2_clip_text->ChangeValue(str);
 	//z1
@@ -559,12 +620,17 @@ void ClippingView::GetSettings()
 	plane->get_copy(abcd);
 	val = fabs(abcd[3]*resz)+0.499;
 	m_z1_clip_sldr->SetValue(val);
+	percent = (double)val/(double)m_z1_clip_sldr->GetMax();
+	barsize = (m_z1_clip_sldr->GetSize().GetHeight() - 20);
 	str = wxString::Format("%d", val);
 	m_z1_clip_text->ChangeValue(str);
 	//z2
 	plane = (*planes)[5];
 	plane->get_copy(abcd);
 	val = fabs(abcd[3]*resz)+0.499;
+	m_zBar->SetPosition(wxPoint(20,10+percent*barsize));
+	m_zBar->SetSize(wxSize(3,barsize*((double)
+		(val - m_z1_clip_sldr->GetValue())/(double)m_z1_clip_sldr->GetMax())));
 	m_z2_clip_sldr->SetValue(val);
 	str = wxString::Format("%d", val);
 	m_z2_clip_text->ChangeValue(str);
@@ -573,10 +639,12 @@ void ClippingView::GetSettings()
 
 void ClippingView::OnLinkChannelsCheck(wxCommandEvent &event)
 {
-	if (m_link_channels->GetValue())
+	if (m_link_channels->GetToolState(ID_LinkChannelsChk))
 	{
 		if (!m_mgr)
 			return;
+		m_link_channels->SetToolNormalBitmap(ID_LinkChannelsChk,
+			wxGetBitmapFromMemory(link_text));
 
 		wxString str;
 		//x1
@@ -634,6 +702,9 @@ void ClippingView::OnLinkChannelsCheck(wxCommandEvent &event)
 		RefreshVRenderViews();
 
 	}
+	else
+		m_link_channels->SetToolNormalBitmap(ID_LinkChannelsChk,
+			wxGetBitmapFromMemory(unlink_text));
 }
 
 void ClippingView::OnClipResetBtn(wxCommandEvent &event)
@@ -668,9 +739,15 @@ void ClippingView::OnClipResetBtn(wxCommandEvent &event)
 	m_link_x = false;
 	m_link_y = false;
 	m_link_z = false;
-	m_link_x_chk->SetValue(false);
-	m_link_y_chk->SetValue(false);
-	m_link_z_chk->SetValue(false);
+	m_check_tb->ToggleTool(ID_LinkXChk,false);
+	m_check_tb->ToggleTool(ID_LinkYChk,false);
+	m_check_tb->ToggleTool(ID_LinkZChk,false);
+	m_check_tb->SetToolNormalBitmap(ID_LinkXChk,
+		wxGetBitmapFromMemory(unlink));
+	m_check_tb->SetToolNormalBitmap(ID_LinkYChk,
+		wxGetBitmapFromMemory(unlink));
+	m_check_tb->SetToolNormalBitmap(ID_LinkZChk,
+		wxGetBitmapFromMemory(unlink));
 
 	//controls
 	//sliders
@@ -689,7 +766,7 @@ void ClippingView::OnClipResetBtn(wxCommandEvent &event)
 	m_z2_clip_text->SetValue(wxString::Format("%d", resz));
 
 	//link
-	if (m_link_channels->GetValue())
+	if (m_link_channels->GetToolState(ID_LinkChannelsChk))
 	{
 		if (m_mgr)
 		{
@@ -783,6 +860,10 @@ void ClippingView::OnX1ClipEdit(wxCommandEvent &event)
 	//str = wxString::Format("%d", ival);
 	//m_x1_clip_text->ChangeValue(str);
 	m_x1_clip_sldr->SetValue(ival);
+	int barsize = (m_x1_clip_sldr->GetSize().GetHeight() - 20);
+	m_xBar->SetPosition(wxPoint(20,10+val*barsize));
+	m_xBar->SetSize(wxSize(3,barsize*((double)
+		(m_x2_clip_sldr->GetValue()-ival)/(double)m_x1_clip_sldr->GetMax())));
 	Plane* plane = (*planes)[0];
 	plane->ChangePlane(Point(val, 0.0, 0.0), Vector(1.0, 0.0, 0.0));
 	if (m_link_x)
@@ -795,7 +876,7 @@ void ClippingView::OnX1ClipEdit(wxCommandEvent &event)
 		plane->ChangePlane(Point(val2, 0.0, 0.0), Vector(-1.0, 0.0, 0.0));
 	}
 
-	if (m_link_channels->GetValue())
+	if (m_link_channels->GetToolState(ID_LinkChannelsChk))
 	{
 		if (m_mgr)
 		{
@@ -894,6 +975,11 @@ void ClippingView::OnX2ClipEdit(wxCommandEvent &event)
 	//str = wxString::Format("%d", ival);
 	//m_x2_clip_text->ChangeValue(str);
 	m_x2_clip_sldr->SetValue(ival);
+	int barsize = (m_x1_clip_sldr->GetSize().GetHeight() - 20);
+	m_xBar->SetPosition(wxPoint(20,10+((double)m_x1_clip_sldr->GetValue()/
+		(double)m_x1_clip_sldr->GetMax())*barsize));
+	m_xBar->SetSize(wxSize(3,barsize*((double)
+		(ival - m_x1_clip_sldr->GetValue())/(double)m_x1_clip_sldr->GetMax())));
 	Plane* plane = (*planes)[1];
 	plane->ChangePlane(Point(val, 0.0, 0.0), Vector(-1.0, 0.0, 0.0));
 	if (m_link_x)
@@ -906,7 +992,7 @@ void ClippingView::OnX2ClipEdit(wxCommandEvent &event)
 		plane->ChangePlane(Point(val2, 0.0, 0.0), Vector(1.0, 0.0, 0.0));
 	}
 
-	if (m_link_channels->GetValue())
+	if (m_link_channels->GetToolState(ID_LinkChannelsChk))
 	{
 		if (m_mgr)
 		{
@@ -998,6 +1084,10 @@ void ClippingView::OnY1ClipEdit(wxCommandEvent &event)
 	//str = wxString::Format("%d", ival);
 	//m_y1_clip_text->ChangeValue(str);
 	m_y1_clip_sldr->SetValue(ival);
+	int barsize = (m_y1_clip_sldr->GetSize().GetHeight() - 20);
+	m_yBar->SetPosition(wxPoint(20,10+val*barsize));
+	m_yBar->SetSize(wxSize(3,barsize*((double)
+		(m_y2_clip_sldr->GetValue()-ival)/(double)m_y1_clip_sldr->GetMax())));
 	Plane* plane = (*planes)[2];
 	plane->ChangePlane(Point(0.0, val, 0.0), Vector(0.0, 1.0, 0.0));
 	if (m_link_y)
@@ -1010,7 +1100,7 @@ void ClippingView::OnY1ClipEdit(wxCommandEvent &event)
 		plane->ChangePlane(Point(0.0, val2, 0.0), Vector(0.0, -1.0, 0.0));
 	}
 
-	if (m_link_channels->GetValue())
+	if (m_link_channels->GetToolState(ID_LinkChannelsChk))
 	{
 		if (m_mgr)
 		{
@@ -1109,6 +1199,11 @@ void ClippingView::OnY2ClipEdit(wxCommandEvent &event)
 	//str = wxString::Format("%d", ival);
 	//m_y2_clip_text->ChangeValue(str);
 	m_y2_clip_sldr->SetValue(ival);
+	int barsize = (m_y1_clip_sldr->GetSize().GetHeight() - 20);
+	m_yBar->SetPosition(wxPoint(20,10+((double)m_y1_clip_sldr->GetValue()/
+		(double)m_y1_clip_sldr->GetMax())*barsize));
+	m_yBar->SetSize(wxSize(3,barsize*((double)
+		(ival - m_y1_clip_sldr->GetValue())/(double)m_y1_clip_sldr->GetMax())));
 	Plane* plane = (*planes)[3];
 	plane->ChangePlane(Point(0.0, val, 0.0), Vector(0.0, -1.0, 0.0));
 	if (m_link_y)
@@ -1121,7 +1216,7 @@ void ClippingView::OnY2ClipEdit(wxCommandEvent &event)
 		plane->ChangePlane(Point(0.0, val2, 0.0), Vector(0.0, 1.0, 0.0));
 	}
 
-	if (m_link_channels->GetValue())
+	if (m_link_channels->GetToolState(ID_LinkChannelsChk))
 	{
 		if (m_mgr)
 		{
@@ -1213,6 +1308,10 @@ void ClippingView::OnZ1ClipEdit(wxCommandEvent &event)
 	//str = wxString::Format("%d", ival);
 	//m_z1_clip_text->ChangeValue(str);
 	m_z1_clip_sldr->SetValue(ival);
+	int barsize = (m_z1_clip_sldr->GetSize().GetHeight() - 20);
+	m_zBar->SetPosition(wxPoint(20,10+val*barsize));
+	m_zBar->SetSize(wxSize(3,barsize*((double)
+		(m_z2_clip_sldr->GetValue()-ival)/(double)m_z1_clip_sldr->GetMax())));
 	Plane* plane = (*planes)[4];
 	plane->ChangePlane(Point(0.0, 0.0, val), Vector(0.0, 0.0, 1.0));
 	if (m_link_z)
@@ -1225,7 +1324,7 @@ void ClippingView::OnZ1ClipEdit(wxCommandEvent &event)
 		plane->ChangePlane(Point(0.0, 0.0, val2), Vector(0.0, 0.0, -1.0));
 	}
 
-	if (m_link_channels->GetValue())
+	if (m_link_channels->GetToolState(ID_LinkChannelsChk))
 	{
 		if (m_mgr)
 		{
@@ -1324,6 +1423,11 @@ void ClippingView::OnZ2ClipEdit(wxCommandEvent &event)
 	//str = wxString::Format("%d", ival);
 	//m_z2_clip_text->ChangeValue(str);
 	m_z2_clip_sldr->SetValue(ival);
+	int barsize = (m_z1_clip_sldr->GetSize().GetHeight() - 20);
+	m_zBar->SetPosition(wxPoint(20,10+((double)m_z1_clip_sldr->GetValue()/
+		(double)m_z1_clip_sldr->GetMax())*barsize));
+	m_zBar->SetSize(wxSize(3,barsize*((double)
+		(ival - m_z1_clip_sldr->GetValue())/(double)m_z1_clip_sldr->GetMax())));
 	Plane* plane = (*planes)[5];
 	plane->ChangePlane(Point(0.0, 0.0, val), Vector(0.0, 0.0, -1.0));
 	if (m_link_z)
@@ -1336,7 +1440,7 @@ void ClippingView::OnZ2ClipEdit(wxCommandEvent &event)
 		plane->ChangePlane(Point(0.0, 0.0, val2), Vector(0.0, 0.0, 1.0));
 	}
 
-	if (m_link_channels->GetValue())
+	if (m_link_channels->GetToolState(ID_LinkChannelsChk))
 	{
 		if (m_mgr)
 		{
@@ -1389,6 +1493,40 @@ void ClippingView::OnIdle(wxIdleEvent &event)
 {
 	if (!IsShown())
 		return;
+	int sz = m_xpanel->GetSize().GetHeight();
+	if (m_x1_clip_sldr->GetSize().GetHeight() != sz) {
+		m_x1_clip_sldr->SetSize(20,sz);
+		m_x2_clip_sldr->SetSize(20,sz);
+		m_y1_clip_sldr->SetSize(20,sz);
+		m_y2_clip_sldr->SetSize(20,sz);
+		m_z1_clip_sldr->SetSize(20,sz);
+		m_z2_clip_sldr->SetSize(20,sz);
+		int barsize = sz - 20;
+		//x
+		int mx = m_x1_clip_sldr->GetMax();
+		int v1 = m_x1_clip_sldr->GetValue();
+		int v2 = m_x2_clip_sldr->GetValue();
+		double clipSz = ((double)(v2 - v1))/((double)mx);
+		double pct = ((double)v1)/((double)mx);
+		m_xBar->SetPosition(wxPoint(20,10+pct*barsize));
+		m_xBar->SetSize(wxSize(3,barsize*clipSz));
+		//y
+		mx = m_y1_clip_sldr->GetMax();
+		v1 = m_y1_clip_sldr->GetValue();
+		v2 = m_y2_clip_sldr->GetValue();
+		clipSz = ((double)(v2 - v1))/((double)mx);
+		pct = ((double)v1)/((double)mx);
+		m_yBar->SetPosition(wxPoint(20,10+pct*barsize));
+		m_yBar->SetSize(wxSize(3,barsize*clipSz));
+		//z
+		mx = m_z1_clip_sldr->GetMax();
+		v1 = m_z1_clip_sldr->GetValue();
+		v2 = m_z2_clip_sldr->GetValue();
+		clipSz = ((double)(v2 - v1))/((double)mx);
+		pct = ((double)v1)/((double)mx);
+		m_zBar->SetPosition(wxPoint(20,10+pct*barsize));
+		m_zBar->SetSize(wxSize(3,barsize*clipSz));
+	}
 
 	int i;
 	VRenderFrame* vrender_frame = (VRenderFrame*)m_frame;
@@ -1442,32 +1580,47 @@ void ClippingView::OnIdle(wxIdleEvent &event)
 }
 
 void ClippingView::OnLinkXCheck(wxCommandEvent &event)
-{
-	m_link_x = m_link_x_chk->GetValue();
+{   
+	m_link_x = m_check_tb->GetToolState(ID_LinkXChk);
 	if (m_link_x)
 	{
 		m_x_sldr_dist = m_x2_clip_sldr->GetValue() -
 			m_x1_clip_sldr->GetValue();
+		m_check_tb->SetToolNormalBitmap(ID_LinkXChk,
+			wxGetBitmapFromMemory(link));
+	} else {
+		m_check_tb->SetToolNormalBitmap(ID_LinkXChk,
+			wxGetBitmapFromMemory(unlink));
 	}
 }
 
 void ClippingView::OnLinkYCheck(wxCommandEvent &event)
 {
-	m_link_y = m_link_y_chk->GetValue();
+	m_link_y = m_check_tb->GetToolState(ID_LinkYChk);
 	if (m_link_y)
 	{
 		m_y_sldr_dist = m_y2_clip_sldr->GetValue() -
 			m_y1_clip_sldr->GetValue();
+		m_check_tb->SetToolNormalBitmap(ID_LinkYChk,
+			wxGetBitmapFromMemory(link));
+	} else {
+		m_check_tb->SetToolNormalBitmap(ID_LinkYChk,
+			wxGetBitmapFromMemory(unlink));
 	}
 }
 
 void ClippingView::OnLinkZCheck(wxCommandEvent &event)
 {
-	m_link_z = m_link_z_chk->GetValue();
+	m_link_z = m_check_tb->GetToolState(ID_LinkZChk);
 	if (m_link_z)
 	{
 		m_z_sldr_dist = m_z2_clip_sldr->GetValue() -
 			m_z1_clip_sldr->GetValue();
+		m_check_tb->SetToolNormalBitmap(ID_LinkZChk,
+			wxGetBitmapFromMemory(link));
+	} else {
+		m_check_tb->SetToolNormalBitmap(ID_LinkZChk,
+			wxGetBitmapFromMemory(unlink));
 	}
 }
 
@@ -1687,7 +1840,7 @@ void ClippingView::OnSliderRClick(wxCommandEvent& event)
 	//good rate
 	if (m_vd->GetSampleRate()<2.0)
 		m_vd->SetSampleRate(2.0);
-	if (m_link_channels->GetValue())
+	if (m_link_channels->GetToolState(ID_LinkChannelsChk))
 	{
 		if (m_mgr)
 		{
@@ -1798,9 +1951,13 @@ void ClippingView::OnSliderRClick(wxCommandEvent& event)
 		id == ID_X2ClipSldr)
 	{
 		m_link_y = false;
-		m_link_y_chk->SetValue(false);
+		m_check_tb->ToggleTool(ID_LinkYChk,false);
+		m_check_tb->SetToolNormalBitmap(ID_LinkYChk,
+			wxGetBitmapFromMemory(unlink));
 		m_link_z = false;
-		m_link_z_chk->SetValue(false);
+		m_check_tb->ToggleTool(ID_LinkZChk,false);
+		m_check_tb->SetToolNormalBitmap(ID_LinkZChk,
+			wxGetBitmapFromMemory(unlink));
 		m_y1_clip_text->SetValue("0");
 		m_y2_clip_text->SetValue(
 			wxString::Format("%d", resy));
@@ -1812,9 +1969,13 @@ void ClippingView::OnSliderRClick(wxCommandEvent& event)
 		id == ID_Y2ClipSldr)
 	{
 		m_link_x = false;
-		m_link_x_chk->SetValue(false);
+		m_check_tb->ToggleTool(ID_LinkXChk,false);
+		m_check_tb->SetToolNormalBitmap(ID_LinkXChk,
+			wxGetBitmapFromMemory(unlink));
 		m_link_z = false;
-		m_link_z_chk->SetValue(false);
+		m_check_tb->ToggleTool(ID_LinkZChk,false);
+		m_check_tb->SetToolNormalBitmap(ID_LinkZChk,
+			wxGetBitmapFromMemory(unlink));
 		m_x1_clip_text->SetValue("0");
 		m_x2_clip_text->SetValue(
 			wxString::Format("%d", resx));
@@ -1826,9 +1987,13 @@ void ClippingView::OnSliderRClick(wxCommandEvent& event)
 		id == ID_Z2ClipSldr)
 	{
 		m_link_x = false;
-		m_link_x_chk->SetValue(false);
+		m_check_tb->ToggleTool(ID_LinkXChk,false);
+		m_check_tb->SetToolNormalBitmap(ID_LinkXChk,
+			wxGetBitmapFromMemory(unlink));
 		m_link_y = false;
-		m_link_y_chk->SetValue(false);
+		m_check_tb->ToggleTool(ID_LinkYChk,false);
+		m_check_tb->SetToolNormalBitmap(ID_LinkYChk,
+			wxGetBitmapFromMemory(unlink));
 		m_x1_clip_text->SetValue("0");
 		m_x2_clip_text->SetValue(
 			wxString::Format("%d", resx));
@@ -1852,9 +2017,13 @@ void ClippingView::OnYZClipBtn(wxCommandEvent& event)
 
 	//reset yz
 	m_link_y = false;
-	m_link_y_chk->SetValue(false);
+	m_check_tb->ToggleTool(ID_LinkYChk,false);
+	m_check_tb->SetToolNormalBitmap(ID_LinkYChk,
+		wxGetBitmapFromMemory(unlink));
 	m_link_z = false;
-	m_link_z_chk->SetValue(false);
+	m_check_tb->ToggleTool(ID_LinkZChk,false);
+	m_check_tb->SetToolNormalBitmap(ID_LinkZChk,
+		wxGetBitmapFromMemory(unlink));
 	m_y1_clip_text->SetValue("0");
 	m_y2_clip_text->SetValue(
 		wxString::Format("%d", resy));
@@ -1901,9 +2070,13 @@ void ClippingView::OnXZClipBtn(wxCommandEvent& event)
 
 	//reset xz
 	m_link_x = false;
-	m_link_x_chk->SetValue(false);
+	m_check_tb->ToggleTool(ID_LinkXChk,false);
+	m_check_tb->SetToolNormalBitmap(ID_LinkXChk,
+		wxGetBitmapFromMemory(unlink));
 	m_link_z = false;
-	m_link_z_chk->SetValue(false);
+	m_check_tb->ToggleTool(ID_LinkZChk,false);
+	m_check_tb->SetToolNormalBitmap(ID_LinkZChk,
+		wxGetBitmapFromMemory(unlink));
 	m_x1_clip_text->SetValue("0");
 	m_x2_clip_text->SetValue(
 		wxString::Format("%d", resx));
@@ -1950,9 +2123,13 @@ void ClippingView::OnXYClipBtn(wxCommandEvent& event)
 
 	//reset xy
 	m_link_x = false;
-	m_link_x_chk->SetValue(false);
+	m_check_tb->ToggleTool(ID_LinkXChk,false);
+	m_check_tb->SetToolNormalBitmap(ID_LinkXChk,
+		wxGetBitmapFromMemory(unlink));
 	m_link_y = false;
-	m_link_y_chk->SetValue(false);
+	m_check_tb->ToggleTool(ID_LinkYChk,false);
+	m_check_tb->SetToolNormalBitmap(ID_LinkYChk,
+		wxGetBitmapFromMemory(unlink));
 	m_x1_clip_text->SetValue("0");
 	m_x2_clip_text->SetValue(
 		wxString::Format("%d", resx));
@@ -2256,9 +2433,7 @@ void ClippingView::EnableAll()
 	m_z1_clip_text->Enable();
 	m_z2_clip_sldr->Enable();
 	m_z2_clip_text->Enable();
-	m_link_x_chk->Enable();
-	m_link_y_chk->Enable();
-	m_link_z_chk->Enable();
+	m_check_tb->Enable();
 	m_clip_reset_btn->Enable();
 	m_yz_clip_btn->Enable();
 	m_xz_clip_btn->Enable();
@@ -2294,9 +2469,7 @@ void ClippingView::DisableAll()
 	m_z1_clip_text->Disable();
 	m_z2_clip_sldr->Disable();
 	m_z2_clip_text->Disable();
-	m_link_x_chk->Disable();
-	m_link_y_chk->Disable();
-	m_link_z_chk->Disable();
+	m_check_tb->Disable();
 	m_clip_reset_btn->Disable();
 	m_yz_clip_btn->Disable();
 	m_xz_clip_btn->Disable();
