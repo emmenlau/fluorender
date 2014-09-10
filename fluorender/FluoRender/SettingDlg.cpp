@@ -247,6 +247,19 @@ wxWindow* SettingDlg::CreatePerformancePage(wxWindow *parent)
 		new wxStaticBox(page, wxID_ANY, "Large Data Streaming"), wxVERTICAL);
 	m_streaming_chk = new wxCheckBox(page, ID_StreamingChk,
 		"Enable streaming for large datasets.");
+	wxBoxSizer *sizer1_1 = new wxBoxSizer(wxHORIZONTAL);
+	st = new wxStaticText(page, 0, "CPU Memory:",
+		wxDefaultPosition, wxSize(110, -1));
+	sizer1_1->Add(st);
+	m_main_mem_buf_sldr = new wxSlider(page, ID_MainMemBufSizeSldr, 40, 0, 200,
+		wxDefaultPosition, wxDefaultSize, wxSL_HORIZONTAL);
+	m_main_mem_buf_text = new wxTextCtrl(page, ID_MainMemBufSizeText, "4000",
+		wxDefaultPosition, wxSize(40, -1), 0, vald_int);
+	st = new wxStaticText(page, 0, "MB",
+		wxDefaultPosition, wxSize(20, -1));
+	sizer1_1->Add(m_main_mem_buf_sldr, 1, wxEXPAND|wxALIGN_CENTER);
+	sizer1_1->Add(m_main_mem_buf_text, 0, wxALIGN_CENTER);
+	sizer1_1->Add(st);
 	wxBoxSizer *sizer2_1 = new wxBoxSizer(wxHORIZONTAL);
 	st = new wxStaticText(page, 0, "Graphics Memory:",
 		wxDefaultPosition, wxSize(110, -1));
@@ -302,6 +315,8 @@ wxWindow* SettingDlg::CreatePerformancePage(wxWindow *parent)
 	group2->Add(10, 5);
 	group2->Add(m_streaming_chk);
 	group2->Add(10, 10);
+	group2->Add(sizer1_1, 0, wxEXPAND);
+	group2->Add(10, 5);
 	group2->Add(sizer2_1, 0, wxEXPAND);
 	group2->Add(10, 5);
 	group2->Add(sizer2_2, 0, wxEXPAND);
@@ -318,32 +333,11 @@ wxWindow* SettingDlg::CreatePerformancePage(wxWindow *parent)
 	group2->Add(st);
 	group2->Add(10, 5);
 
-	wxBoxSizer *group3 = new wxStaticBoxSizer(
-		new wxStaticBox(page, wxID_ANY, "Main Memory Buffer"), wxVERTICAL);
-	wxBoxSizer *sizer3_1 = new wxBoxSizer(wxHORIZONTAL);
-	st = new wxStaticText(page, 0, "Buffer Size:",
-		wxDefaultPosition, wxSize(110, -1));
-	sizer3_1->Add(st);
-	m_main_mem_buf_sldr = new wxSlider(page, ID_MainMemBufSizeSldr, 40, 0, 200,
-		wxDefaultPosition, wxDefaultSize, wxSL_HORIZONTAL);
-	m_main_mem_buf_text = new wxTextCtrl(page, ID_MainMemBufSizeText, "4000",
-		wxDefaultPosition, wxSize(40, -1), 0, vald_int);
-	st = new wxStaticText(page, 0, "MB",
-		wxDefaultPosition, wxSize(20, -1));
-	sizer3_1->Add(m_main_mem_buf_sldr, 1, wxEXPAND|wxALIGN_CENTER);
-	sizer3_1->Add(m_main_mem_buf_text, 0, wxALIGN_CENTER);
-	sizer3_1->Add(st);
-	group3->Add(10, 5);
-	group3->Add(sizer3_1, 0, wxEXPAND);
-	group3->Add(10, 5);
-
 	wxBoxSizer *sizerV = new wxBoxSizer(wxVERTICAL);
 	sizerV->Add(10, 10);
 	sizerV->Add(group1, 0, wxEXPAND);
 	sizerV->Add(10, 10);
 	sizerV->Add(group2, 0, wxEXPAND);
-	sizerV->Add(10, 10);
-	sizerV->Add(group3, 0, wxEXPAND);
 
 	page->SetSizer(sizerV);
 	return page;
@@ -1056,6 +1050,8 @@ void SettingDlg::EnableStreaming(bool enable)
 {
 	if (enable)
 	{
+		m_main_mem_buf_sldr->Enable();
+		m_main_mem_buf_text->Enable();
 		m_graphics_mem_sldr->Enable();
 		m_graphics_mem_text->Enable();
 		m_large_data_sldr->Enable();
@@ -1067,6 +1063,8 @@ void SettingDlg::EnableStreaming(bool enable)
 	}
 	else
 	{
+		m_main_mem_buf_sldr->Disable();
+		m_main_mem_buf_text->Disable();
 		m_graphics_mem_sldr->Disable();
 		m_graphics_mem_text->Disable();
 		m_large_data_sldr->Disable();
