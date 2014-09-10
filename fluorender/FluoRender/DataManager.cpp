@@ -4399,6 +4399,7 @@ int DataManager::LoadVolumeData(wxString &filename, int type, int ch_num, int t_
 			breader->build_pyramid(pyramid, fnames, t_num>=0?t_num:reader->GetCurTime(), i);
 			name = wxString( breader->GetBrickFileName(t_num>=0?t_num:reader->GetCurTime(), i, 0) );
 			pathname = wxString( breader->GetBrickFilePath(t_num>=0?t_num:reader->GetCurTime(), i, 0) );
+			breader->SetLevel(0);
 		}
 
 		bool valid_spc = reader->IsSpcInfoValid();

@@ -426,13 +426,13 @@ z
 	   return NULL;
    }
 
-   void *TextureBrick::tex_data_brk(int c, wstring *fname, int filetype)
+   void *TextureBrick::tex_data_brk(int c, wstring *fname, int filetype, bool use_priority)
    {
 	   unsigned char *ptr = NULL;
+		int bd = tex_type_size(tex_type(c));
 	   if(brkdata_) ptr = (unsigned char *)(brkdata_);
 	   else
 	   {
-		   int bd = tex_type_size(tex_type(c));
 		   ptr = new unsigned char[nx_*ny_*nz_*bd];
 		   if (!read_brick((char *)ptr, nx_*ny_*nz_*bd, fname, filetype))
 		   {
@@ -441,6 +441,37 @@ z
 		   }
 		   brkdata_ = (void *)ptr;
 	   }
+
+	   if (brkdata_ && use_priority)
+	   {
+		   unsigned int freq = 0;
+		   unsigned int index;
+		   double val;
+		   for (int i=0; i<nx_; ++i)
+		   for (int j=0; j<ny_; ++j)
+		   for (int k=0; j<nz_; ++j)
+		   {
+			   if (bd == 1)
+			   {
+				   index = nx_*ny_*k + nx_*j + i;
+				   val = double(((unsigned char*)brkdata_)[index])/255.0;
+				   if (val > 0.1)
+					   ++freq;
+			   }
+			   else if (bd == 2)
+			   {
+				   index = bd*(nx_*ny_*k + nx_*j + i);
+				   val = double(((unsigned short*)brkdata_)[index])/65535.0;
+				   if (val > 0.1)
+					   ++freq;
+			   }
+		   }
+		   if (freq == 0)
+			   priority_ = 0;
+		   else
+			   priority_ = 1;
+	   }
+
 	   return ptr;
    }
    

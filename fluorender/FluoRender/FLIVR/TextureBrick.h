@@ -132,7 +132,7 @@ namespace FLIVR {
 
 		virtual GLenum tex_type(int c);
 		virtual void* tex_data(int c);
-		virtual void* tex_data_brk(int c, std::wstring* fname, int filetype);
+		virtual void* tex_data_brk(int c, std::wstring* fname, int filetype, bool use_priority);
 		
 		void compute_polygons(Ray& view, double tmin, double tmax, double dt,
 			vector<double>& vertex, vector<double>& texcoord,

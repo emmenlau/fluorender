@@ -875,7 +875,10 @@ namespace FLIVR
 //							brick->tex_type(c), brick->tex_data_brk(c, test, tex_->GetFileType()));
 						glTexImage3D(GL_TEXTURE_3D, 0, internal_format, nx, ny, nz, 0, format,
 							brick->tex_type(c), 0);
-						glTexSubImage3D(GL_TEXTURE_3D, 0, 0, 0, 0, nx, ny, nz, format, brick->tex_type(c), brick->tex_data_brk(c, test, tex_->GetFileType()));
+						void* tex_data_brk = brick->tex_data_brk(c, test, tex_->GetFileType(), tex_->get_use_priority());
+						//if (tex_->get_use_priority())
+						//	brick->set_priority();
+						glTexSubImage3D(GL_TEXTURE_3D, 0, 0, 0, 0, nx, ny, nz, format, brick->tex_type(c), tex_data_brk);
 						if (mainmem_buf_size_ == 0.0) brick->freeBrkData();
 						else 
 						{
