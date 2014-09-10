@@ -1612,7 +1612,11 @@ bool VPropView::SetSpacings()
          if (vrv)
             if (vrv->GetVolumeData(v_name))
                for (int j=0; j<vrv->GetAllVolumeNum(); j++)
-                  vrv->GetAllVolumeData(j)->SetSpacings(spcx, spcy, spcz);
+			   {
+				   VolumeData* vd = vrv->GetAllVolumeData(j);
+				   if (vd->GetTexture() && !vd->GetTexture()->isBrxml())
+						vrv->GetAllVolumeData(j)->SetSpacings(spcx, spcy, spcz);
+			   }
       }
    }
 

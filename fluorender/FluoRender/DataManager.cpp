@@ -4380,6 +4380,11 @@ int DataManager::LoadVolumeData(wxString &filename, int type, int ch_num, int t_
 	{
 		VolumeData *vd = new VolumeData();
 		vd->SetSkipBrick(m_skip_brick);
+		if (type == LOAD_TYPE_BRKXML)
+		{
+			BRKXMLReader* breader = (BRKXMLReader*)reader;
+			breader->SetLevel(0);
+		}
 		Nrrd* data = reader->Convert(t_num>=0?t_num:reader->GetCurTime(), i, true);
 		if (!data)
 			continue;
