@@ -1,6 +1,6 @@
+build64
 *.aps
 *.rc
-*.ico
 resource*
 *.set
 *.dft
