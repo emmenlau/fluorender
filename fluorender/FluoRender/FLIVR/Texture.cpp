@@ -361,12 +361,11 @@ namespace FLIVR
 				TextureBrick *tb = (*bricks_)[i];
 				tb->set_nrrd(nv_nrrd, 0);
 				tb->set_nrrd(gm_nrrd, 1);
-				//			if (use_priority_)
-				//			{
-				//				if (!brkxml_) tb->set_priority();
-				//				else tb->set_priority_brk(&ifs_, filetype_);
-				//				n_p0_ += tb->get_priority()==0?1:0;
-				//			}
+				if (use_priority_)
+				{
+					if (!brkxml_) tb->set_priority();
+					n_p0_ += tb->get_priority()==0?1:0;
+				}
 			}
 		}
 
