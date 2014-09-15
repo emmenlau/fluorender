@@ -455,7 +455,7 @@ z
 			   {
 				   index = nx_*ny_*k + nx_*j + i;
 				   val = double(((unsigned char*)brkdata_)[index])/255.0;
-				   if (val > 0.1)
+				   if (val > 0.01)
 					   ++freq;
 			   }
 			   else if (bd == 2)
@@ -466,10 +466,10 @@ z
 					   ++freq;
 			   }
 		   }
-		   if (freq == 0)
-			   priority_ = 0;
-		   else
+		   if (freq < 10)
 			   priority_ = 1;
+		   else
+			   priority_ = 0;
 	   }
 
 	   return ptr;
