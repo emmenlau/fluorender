@@ -2678,7 +2678,7 @@ void VRenderGLView::switchLevel(VolumeData *vd)
 				sf = 2.0*m_radius/spc_y/double(ny);
 			else
 				sf = 2.0*m_radius/spc_x/double(nx);
-			sfs.push_back(sf);
+			sfs.push_back(sf*3.0);
 		}
 		int lv = lvnum - 1;
 		for (int i = lvnum - 1; i >= 0; i--)
