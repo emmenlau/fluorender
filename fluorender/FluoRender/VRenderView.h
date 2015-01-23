@@ -445,6 +445,9 @@ class VRenderGLView: public wxGLCanvas
 	void DrawTraces();
 	void GetTraces();
 
+	//level
+	void SetLevel(int val);
+
    public:
          //script run
          bool m_run_script;
@@ -756,6 +759,8 @@ class VRenderGLView: public wxGLCanvas
          //predraw in streaming mode
          bool m_pre_draw;
 
+		 int m_fixed_level;
+
    private:
 #ifdef _WIN32
          //wacom tablet
@@ -904,7 +909,8 @@ class VRenderView: public wxPanel
       ID_DefaultBtn,
       ID_AovSldr,
       ID_AovText,
-      ID_FreeChk
+      ID_FreeChk,
+	  ID_LevelTxt
    };
 
    VRenderView(wxWindow* frame,
@@ -1396,6 +1402,7 @@ class VRenderView: public wxPanel
    wxTextCtrl *m_scale_factor_text;
    wxToolBar *m_scale_reset_btn;
    wxSpinButton* m_scale_factor_spin;
+   wxTextCtrl *m_level_text;
 
    //draw clip
    bool m_draw_clip;
@@ -1455,6 +1462,7 @@ class VRenderView: public wxPanel
    void OnScaleReset(wxCommandEvent &event);
    void OnScaleFactorSpinUp(wxSpinEvent& event);
    void OnScaleFactorSpinDown(wxSpinEvent& event);
+   void OnLevelEdit(wxCommandEvent &event);
    //bar bottom
    void OnRotReset(wxCommandEvent &event);
    void OnValueEdit(wxCommandEvent& event);

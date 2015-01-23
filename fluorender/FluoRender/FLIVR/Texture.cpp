@@ -605,12 +605,13 @@ namespace FLIVR
 		
 	}
 
-	void Texture::setLevel(int lv)
+	bool Texture::setLevel(int lv)
 	{
-		if (lv < 0 || lv >= pyramid_lv_num_ || !brkxml_ || pyramid_cur_lv_ == lv) return;
+		if (lv < 0 || lv >= pyramid_lv_num_ || !brkxml_ || pyramid_cur_lv_ == lv) return false;
 		pyramid_cur_lv_ = lv;
 		build(pyramid_[pyramid_cur_lv_].data, 0, 0, 256, 0, 0, &pyramid_[pyramid_cur_lv_].bricks);
 		set_data_file(pyramid_[pyramid_cur_lv_].filenames, pyramid_[pyramid_cur_lv_].filetype);
+		return true;
 	}
 
 	bool Texture::buildPyramid(vector<Pyramid_Level> &pyramid, vector<vector<vector<vector<wstring *>>>> &filenames)

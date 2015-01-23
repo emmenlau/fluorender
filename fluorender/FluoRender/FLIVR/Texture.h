@@ -167,7 +167,7 @@ namespace FLIVR
 		bool isBrxml() {return brkxml_;}
 		bool buildPyramid(vector<Pyramid_Level> &pyramid, vector<vector<vector<vector<wstring *>>>> &filenames);
 		void set_FrameAndChannel(int fr, int ch);
-		void setLevel(int lv);
+		bool setLevel(int lv);
 		int GetCurLevel() {return pyramid_cur_lv_;}
 		int GetLevelNum() {return pyramid_.size();}
 

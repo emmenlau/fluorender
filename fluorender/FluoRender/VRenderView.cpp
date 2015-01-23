@@ -285,7 +285,8 @@ VRenderGLView::VRenderGLView(wxWindow* frame,
    //full cell
    m_cell_full(false),
    //link cells
-   m_cell_link(false)
+   m_cell_link(false),
+   m_fixed_level(-1)
 {
    //create context
    if (sharedContext)
@@ -2678,18 +2679,21 @@ void VRenderGLView::switchLevel(VolumeData *vd)
 				sf = 2.0*m_radius/spc_y/double(ny);
 			else
 				sf = 2.0*m_radius/spc_x/double(nx);
-			sfs.push_back(sf*3.0);
+			sfs.push_back(sf);
 		}
 		int lv = lvnum - 1;
 		for (int i = lvnum - 1; i >= 0; i--)
 		{
 			if (m_scale_factor > sfs[i]) lv = i - 1;
 		}
-		if (lv < 0) lv = 0;
 		if (m_interactive) lv++;
+		if (m_fixed_level >=0 ) lv = m_fixed_level;
+		if (lv < 0) lv = 0;
 		if (lv >= lvnum) lv = lvnum - 1;
 		vtex->setLevel(lv);
 		vd->SetSpacings(spx[lv], spy[lv], spz[lv]);
+
+		m_vrv->m_level_text->ChangeValue(wxString::Format("%d", lv));
 	}
 }
 
@@ -8567,7 +8571,7 @@ void VRenderGLView::StartLoopUpdate()
             Texture* tex = vd->GetTexture();
             if (tex)
             {
-			   switchLevel(vd);
+				switchLevel(vd);
                vector<TextureBrick*> *bricks = tex->get_bricks();
                if (!bricks || bricks->size()==0)
                   continue;
@@ -9329,6 +9333,12 @@ void VRenderGLView::GetTraces()
 		vr_frame->GetTraceDlg()->GetSettings(m_vrv);
 }
 
+void VRenderGLView::SetLevel(int val)
+{
+	m_fixed_level = val;
+	RefreshGL(false, true);
+}
+
 /*WXLRESULT VRenderGLView::MSWWindowProc(WXUINT message, WXWPARAM wParam, WXLPARAM lParam)
   {
   PACKET pkt;
@@ -9968,6 +9978,7 @@ EVT_TEXT(ID_ScaleFactorText, VRenderView::OnScaleFactorEdit)
 EVT_TOOL(ID_ScaleResetBtn, VRenderView::OnScaleReset)
 EVT_SPIN_UP(ID_ScaleFactorSpin, VRenderView::OnScaleFactorSpinDown)
 EVT_SPIN_DOWN(ID_ScaleFactorSpin, VRenderView::OnScaleFactorSpinUp)
+EVT_TEXT(ID_LevelTxt, VRenderView::OnLevelEdit)
 //bar bottom
 EVT_TOOL(ID_RotResetBtn, VRenderView::OnRotReset)
 EVT_TEXT(ID_XRotText, VRenderView::OnValueEdit)
@@ -10264,6 +10275,8 @@ void VRenderView::CreateBar()
          wxDefaultPosition, wxSize(30, 20), 0, vald_int);
    m_scale_factor_spin = new wxSpinButton(this, ID_ScaleFactorSpin,
          wxDefaultPosition, wxSize(30, 20));
+   m_level_text = new wxTextCtrl(this, ID_LevelTxt, "0",
+	   wxDefaultPosition, wxSize(30, 20));
    sizer_v_4->AddSpacer(50);
    sizer_v_4->Add(st1, 0, wxALIGN_CENTER);
    sizer_v_4->Add(m_center_btn, 0, wxALIGN_CENTER);
@@ -10272,6 +10285,7 @@ void VRenderView::CreateBar()
    sizer_v_4->Add(m_scale_factor_spin, 0, wxALIGN_CENTER);
    sizer_v_4->Add(m_scale_factor_text, 0, wxALIGN_CENTER);
    sizer_v_4->Add(m_scale_reset_btn, 0, wxALIGN_CENTER);
+   sizer_v_4->Add(m_level_text, 0, wxALIGN_CENTER);
    sizer_v_4->AddSpacer(50);
 
    //middle sizer
@@ -11339,6 +11353,14 @@ void VRenderView::OnScaleFactorSpinDown(wxSpinEvent& event)
    val--;
    str_val = wxString::Format("%d", val);
    m_scale_factor_text->SetValue(str_val);
+}
+
+void VRenderView::OnLevelEdit(wxCommandEvent& event)
+{
+	wxString str = m_level_text->GetValue();
+	long val;
+	str.ToLong(&val);
+	m_glview->SetLevel(val);
 }
 
 void VRenderView::OnScaleReset(wxCommandEvent &event)
