@@ -2679,14 +2679,16 @@ void VRenderGLView::switchLevel(VolumeData *vd)
 				sf = 2.0*m_radius/spc_y/double(ny);
 			else
 				sf = 2.0*m_radius/spc_x/double(nx);
-			sfs.push_back(sf);
+			sfs.push_back(sf*1.5);
 		}
 		int lv = lvnum - 1;
-		for (int i = lvnum - 1; i >= 0; i--)
+		if (!m_interactive)
 		{
-			if (m_scale_factor > sfs[i]) lv = i - 1;
+			for (int i = lvnum - 1; i >= 0; i--)
+			{
+				if (m_scale_factor > sfs[i]) lv = i - 1;
+			}
 		}
-		if (m_interactive) lv++;
 		if (m_fixed_level >=0 ) lv = m_fixed_level;
 		if (lv < 0) lv = 0;
 		if (lv >= lvnum) lv = lvnum - 1;
@@ -4066,8 +4068,8 @@ void VRenderGLView::UpdateBrushState()
             !wxGetKeyState(wxKeyCode('Z')) &&
             !wxGetKeyState(wxKeyCode('X')))
       {
-         if (wxGetMouseState().LeftDown())
-            Segment();
+         //if (wxGetMouseState().LeftDown())
+         //   Segment();
          if (m_int_mode == 7)
             m_int_mode = 5;
          else
@@ -11359,8 +11361,10 @@ void VRenderView::OnLevelEdit(wxCommandEvent& event)
 {
 	wxString str = m_level_text->GetValue();
 	long val;
-	str.ToLong(&val);
-	m_glview->SetLevel(val);
+	if (str.ToLong(&val))
+		m_glview->SetLevel(val);
+	else
+		m_glview->SetLevel(-1);
 }
 
 void VRenderView::OnScaleReset(wxCommandEvent &event)
