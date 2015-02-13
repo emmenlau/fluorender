@@ -173,7 +173,7 @@ void BRKXMLReader::Preprocess()
 	m_level_num = m_pyramid.size();
 	m_cur_level = m_pyramid.size()-1;
 
-	OutputInfo();
+	//OutputInfo();
 }
 
 BRKXMLReader::ImageInfo BRKXMLReader::ReadImageInfo(tinyxml2::XMLElement *infoNode)
