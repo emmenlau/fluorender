@@ -158,7 +158,7 @@ namespace FLIVR
          // Tests the bounding box against the current MODELVIEW and
          // PROJECTION matrices to determine if it is within the viewport.
          // Returns true if it is visible.
-         bool test_against_view(const BBox &bbox, bool use_ex=false);
+         bool test_against_view(const BBox &bbox);
 
 		 void clear_brick_buf();
 

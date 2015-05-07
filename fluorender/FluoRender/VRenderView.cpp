@@ -506,7 +506,7 @@ void VRenderGLView::HandleProjection(int nx, int ny, bool restrict)
    else
    {
       glOrtho(m_ortho_left, m_ortho_right, m_ortho_bottom, m_ortho_top,
-            -m_near_clip, m_far_clip);
+            -m_far_clip/100.0, m_far_clip);
    }
 }
 
@@ -8559,6 +8559,26 @@ void VRenderGLView::StartLoopUpdate()
 
    if (TextureRenderer::get_mem_swap())
    {
+		int nx = GetSize().x;
+		int ny = GetSize().y;
+		glMatrixMode(GL_MODELVIEW_MATRIX);
+		glPushMatrix();
+		glMatrixMode(GL_PROJECTION_MATRIX);
+		glPushMatrix();
+		//projection
+		HandleProjection(nx, ny);
+		//Transformation
+		HandleCamera();
+		//translate object
+		glTranslated(m_obj_transx, m_obj_transy, m_obj_transz);
+		//rotate object
+		glRotated(m_obj_rotz+180.0, 0.0, 0.0, 1.0);
+		glRotated(m_obj_roty+180.0, 0.0, 1.0, 0.0);
+		glRotated(m_obj_rotx, 1.0, 0.0, 0.0);
+		//center object
+		glTranslated(-m_obj_ctrx, -m_obj_ctry, -m_obj_ctrz);
+		double sclx, scly, sclz;
+
       PopVolumeList();
       int total_num = 0;
       int num_chan;
@@ -8569,10 +8589,19 @@ void VRenderGLView::StartLoopUpdate()
          VolumeData* vd = m_vd_pop_list[i];
          if (vd)
          {
+			vd->GetScalings(sclx, scly, sclz);
+			glPushMatrix();
+			glScalef(sclx, scly, sclz);
+
             num_chan = 0;
             Texture* tex = vd->GetTexture();
             if (tex)
             {
+				Transform *tform = tex->transform();
+				double mvmat[16];
+				tform->get_trans(mvmat);
+				glMultMatrixd(mvmat);
+
 				switchLevel(vd);
                vector<TextureBrick*> *bricks = tex->get_bricks();
                if (!bricks || bricks->size()==0)
@@ -8581,7 +8610,7 @@ void VRenderGLView::StartLoopUpdate()
                {
                   (*bricks)[j]->set_drawn(false);
                   if ((*bricks)[j]->get_priority()>0 ||
-                        !vd->GetVR()->test_against_view((*bricks)[j]->bbox(), true))
+                        !vd->GetVR()->test_against_view((*bricks)[j]->bbox()))
                      continue;
                   total_num++;
                   num_chan++;
@@ -8595,6 +8624,8 @@ void VRenderGLView::StartLoopUpdate()
             vd->SetBrickNum(num_chan);
             if (vd->GetVR())
                vd->GetVR()->set_done_loop(false);
+
+			glPopMatrix();
          }
       }
 
@@ -8604,6 +8635,11 @@ void VRenderGLView::StartLoopUpdate()
          TextureRenderer::set_total_brick_num(total_num);
          TextureRenderer::reset_done_current_chan();
       }
+
+		glMatrixMode(GL_MODELVIEW_MATRIX);
+		glPopMatrix();
+		glMatrixMode(GL_PROJECTION_MATRIX);
+		glPopMatrix();
    }
 }
 
@@ -10991,13 +11027,13 @@ wxGLContext* VRenderView::GetContext()
       return 0;
 }
 
-void VRenderView::RefreshGL(bool interactive)
+void VRenderView::RefreshGL(bool interactive, bool start_loop)
 {
    if (m_glview)
    {
       m_glview->m_force_clear = true;
       m_glview->m_interactive = interactive;
-      m_glview->RefreshGL();
+      m_glview->RefreshGL(false, start_loop);
    }
 }
 
